@@ -12,6 +12,7 @@ Canonical docs for **docs-ai-reverse** — OpenAI-compatible Docs AI gateway (Mi
 | [API](api.md) | Endpoints, auth, curl examples |
 | [Configuration / 配置](configuration.md) | `config.yaml` fields and security |
 | [Development / 开发](development.md) | Local workflow and adding providers |
+| [CI/CD / 发布](ci-cd.md) | GitHub Actions, Docker, SemVer releases |
 | [llms.txt](../llms.txt) | AI crawler index (EN + ZH) |
 | [llms-full.txt](../llms-full.txt) | Expanded machine-readable summary |
 

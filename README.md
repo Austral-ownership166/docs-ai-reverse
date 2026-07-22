@@ -1,6 +1,9 @@
 # docs-ai-reverse
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![CI](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/ci.yml/badge.svg)](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/ci.yml)
+[![Release](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/release.yml/badge.svg)](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/release.yml)
+[![GHCR](https://img.shields.io/badge/GHCR-docs--ai--reverse-blue?logo=docker&logoColor=white)](https://github.com/6Kmfi6HP/docs-ai-reverse/pkgs/container/docs-ai-reverse)
 [![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991)](./docs/api.md)
 [![English README](https://img.shields.io/badge/README-English-0b57d0)](./README.en.md)
 [![Docs](https://img.shields.io/badge/docs-hub-1f6b4f)](./docs/index.md)
@@ -24,6 +27,8 @@
 - [架构](#架构)
 - [Provider 对比](#provider-对比)
 - [快速开始](#快速开始)
+- [Docker 运行](#docker-运行)
+- [版本发布](#版本发布)
 - [API 使用](#api-使用)
 - [配置参考](#配置参考)
 - [项目结构](#项目结构)
@@ -202,6 +207,50 @@ go build -o docs-ai-reverse .
 ```
 
 默认监听地址为 `127.0.0.1:8317`。启动后，CLIProxyAPI/v7 提供 OpenAI-compatible gateway endpoints，四个 provider 都会注册。
+
+## Docker 运行
+
+发布后的多架构镜像在 GHCR：
+
+```bash
+docker pull ghcr.io/6kmfi6hp/docs-ai-reverse:latest
+```
+
+容器默认读取 `/config/config.yaml`。请把配置中的 `host` 设为 `0.0.0.0`：
+
+```bash
+cp config.example.yaml config.yaml
+# host: "0.0.0.0" ，并设置 api-keys
+mkdir -p auths
+
+docker run --rm -p 8317:8317 \
+  -v "$(pwd)/config.yaml:/config/config.yaml:ro" \
+  -v "$(pwd)/auths:/app/auths" \
+  ghcr.io/6kmfi6hp/docs-ai-reverse:latest
+```
+
+也可用本地构建：
+
+```bash
+docker build -t docs-ai-reverse:local .
+```
+
+完整说明见 [docs/ci-cd.md](./docs/ci-cd.md)。
+
+## 版本发布
+
+推送 SemVer tag（如 `v0.1.0`）会自动：
+
+1. 运行测试
+2. 用 GoReleaser 发布跨平台二进制到 GitHub Releases
+3. 构建并推送 `linux/amd64` + `linux/arm64` 镜像到 `ghcr.io/6kmfi6hp/docs-ai-reverse`
+
+```bash
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+详情：[docs/ci-cd.md](./docs/ci-cd.md)。
 
 ## API 使用
 
@@ -467,6 +516,7 @@ MINTLIFY_PROXY=socks5://127.0.0.1:1080 go run ./cmd/probe
 | [docs/api.md](./docs/api.md) | OpenAI-compatible API |
 | [docs/configuration.md](./docs/configuration.md) | 配置项与安全注意 |
 | [docs/development.md](./docs/development.md) | 开发与扩展 provider |
+| [docs/ci-cd.md](./docs/ci-cd.md) | CI/CD、Docker、版本发布 |
 | [llms.txt](./llms.txt) | AI / LLM 爬虫入口（中英） |
 | [llms-full.txt](./llms-full.txt) | 更完整的机器可读摘要 |
 | [Site EN](https://6kmfi6hp.github.io/docs-ai-reverse/) | GitHub Pages English |

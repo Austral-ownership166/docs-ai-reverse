@@ -1,6 +1,9 @@
 # docs-ai-reverse
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![CI](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/ci.yml/badge.svg)](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/ci.yml)
+[![Release](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/release.yml/badge.svg)](https://github.com/6Kmfi6HP/docs-ai-reverse/actions/workflows/release.yml)
+[![GHCR](https://img.shields.io/badge/GHCR-docs--ai--reverse-blue?logo=docker&logoColor=white)](https://github.com/6Kmfi6HP/docs-ai-reverse/pkgs/container/docs-ai-reverse)
 [![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991)](./docs/api.md)
 [![中文 README](https://img.shields.io/badge/README-中文-1f6b4f)](./README.md)
 [![Site EN](https://img.shields.io/badge/site-English-222222)](https://6kmfi6hp.github.io/docs-ai-reverse/)
@@ -46,6 +49,18 @@ curl http://127.0.0.1:8317/v1/models \
   -H "Authorization: Bearer sk-local-demo"
 ```
 
+## Docker
+
+```bash
+# config.yaml must use host: "0.0.0.0" for container networking
+docker run --rm -p 8317:8317 \
+  -v "$(pwd)/config.yaml:/config/config.yaml:ro" \
+  -v "$(pwd)/auths:/app/auths" \
+  ghcr.io/6kmfi6hp/docs-ai-reverse:latest
+```
+
+Push a SemVer tag (`v0.1.0`) to publish GitHub Release binaries and multi-arch GHCR images. See [docs/ci-cd.md](./docs/ci-cd.md).
+
 ## Docs
 
 | Doc | Language / notes |
@@ -56,6 +71,7 @@ curl http://127.0.0.1:8317/v1/models \
 | [docs/architecture.md](./docs/architecture.md) | Architecture |
 | [docs/configuration.md](./docs/configuration.md) | Config reference |
 | [docs/development.md](./docs/development.md) | Development |
+| [docs/ci-cd.md](./docs/ci-cd.md) | CI/CD, Docker, releases |
 | [llms.txt](./llms.txt) | AI crawler index (EN + ZH) |
 | [Site EN](https://6kmfi6hp.github.io/docs-ai-reverse/) | GitHub Pages |
 | [Site ZH](https://6kmfi6hp.github.io/docs-ai-reverse/zh.html) | 中文落地页 |

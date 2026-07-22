@@ -5,6 +5,8 @@ auths/
 # Binaries
 claude-chat
 mintlify-gateway
+docs-ai-reverse
+dist/
 *.exe
 *.dll
 *.so

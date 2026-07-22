@@ -357,3 +357,18 @@ ReadMe 上游通过文档站点的 `/ask` 接口工作。适配器会抓取 HTML
 6. 保存失败的 HTTP 状态和截断后的错误文本，但删除 token、cookie、代理凭据和完整用户内容。
 
 没有稳定网络或上游 auth 时，不要把 live provider 请求硬编码进默认单元测试。使用固定 fixture、`httptest` 或可控的 transport 测试协议转换；把真实连通性验证留给显式的 probe 或集成测试流程。
+
+## CI / 发布
+
+推送到 `main` 或打开 PR 时会跑 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)（vet / test / build / Docker build）。推送 `v*.*.*` tag 会触发 [`.github/workflows/release.yml`](../.github/workflows/release.yml)，发布 GitHub Release 二进制并推送 GHCR 镜像。
+
+本地对齐 CI：
+
+```bash
+go vet ./...
+go test ./...
+go build -o docs-ai-reverse .
+docker build -t docs-ai-reverse:local .
+```
+
+版本与 Docker 细节见 [ci-cd.md](./ci-cd.md)。

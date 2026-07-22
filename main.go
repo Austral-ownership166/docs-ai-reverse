@@ -19,6 +19,13 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
 
+// Populated by GoReleaser / Docker build ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 type modelDef struct {
 	ID          string
 	DisplayName string
@@ -136,6 +143,14 @@ func registerAllProviders(core *coreauth.Manager, p *providers, proxyURL string)
 }
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "-v", "-version", "--version", "version":
+			fmt.Printf("docs-ai-reverse %s (commit=%s date=%s)\n", version, commit, date)
+			return
+		}
+	}
+
 	cfgPath := "config.yaml"
 	if len(os.Args) > 1 {
 		cfgPath = os.Args[1]
