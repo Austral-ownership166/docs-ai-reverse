@@ -45,10 +45,16 @@ func registerMintlify(core *coreauth.Manager, exec *provider.Executor) (string, 
 	}
 
 	models := []*cliproxy.ModelInfo{{
-		ID:          "claude-docs",
-		Object:      "model",
-		Type:        "mintlify",
-		DisplayName: "Claude Code Docs",
+		ID:                   "claude-docs",
+		Object:               "model",
+		Type:                 "mintlify",
+		DisplayName:          "Claude Code Docs",
+		Description:          "Mintlify docs assistant (local token estimate, 200k context)",
+		ContextLength:        200000,
+		InputTokenLimit:      200000,
+		OutputTokenLimit:     8192,
+		MaxCompletionTokens:  8192,
+		SupportedGenerationMethods: []string{"generateContent", "countTokens"},
 	}}
 	for _, a := range core.List() {
 		if strings.EqualFold(a.Provider, "mintlify") {

@@ -320,9 +320,27 @@ func (e *Executor) ExecuteStream(ctx context.Context, a *coreauth.Auth, req clip
 	return &clipexec.StreamResult{Headers: headers, Chunks: out}, nil
 }
 
-// CountTokens is not implemented for Mintlify.
-func (e *Executor) CountTokens(context.Context, *coreauth.Auth, clipexec.Request, clipexec.Options) (clipexec.Response, error) {
-	return clipexec.Response{}, errors.New("mintlify: count tokens not implemented")
+// CountTokens estimates prompt tokens locally (Mintlify has no count API).
+// Uses tiktoken o200k_base; advertised model context is maxContextTokens (200k).
+func (e *Executor) CountTokens(ctx context.Context, _ *coreauth.Auth, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
+	from := formatMintlify
+	responseFormat := clipexec.ResponseFormatOrSource(opts)
+
+	payload := opts.OriginalRequest
+	if len(payload) == 0 {
+		payload = req.Payload
+	}
+	count, err := estimatePromptTokens(payload)
+	if err != nil {
+		return clipexec.Response{}, err
+	}
+	if count > maxContextTokens {
+		count = maxContextTokens
+	}
+
+	usageJSON := buildOpenAIUsageJSON(count)
+	out := sdktranslator.TranslateTokenCount(ctx, from, responseFormat, count, usageJSON)
+	return clipexec.Response{Payload: out}, nil
 }
 
 // HttpRequest is not supported (Mintlify uses tls-client, not net/http).

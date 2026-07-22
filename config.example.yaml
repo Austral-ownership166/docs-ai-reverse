@@ -1,4 +1,9 @@
-# Mintlify → OpenAI gateway (CLIProxyAPI)
+# Mintlify → OpenAI gateway (CLIProxyAPI SDK)
+#
+# Exposes OpenAI-compatible endpoints with Mintlify tool-call translation:
+#   POST /v1/chat/completions   (stream tool_calls + content)
+#   POST /v1/responses          (function_call output items + message)
+# Model: claude-docs
 #
 # Copy to config.yaml and adjust api-keys before running:
 #   cp config.example.yaml config.yaml
