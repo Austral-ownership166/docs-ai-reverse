@@ -2,17 +2,21 @@
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991)](./docs/api.md)
+[![English README](https://img.shields.io/badge/README-English-0b57d0)](./README.en.md)
 [![Docs](https://img.shields.io/badge/docs-hub-1f6b4f)](./docs/index.md)
 [![llms.txt](https://img.shields.io/badge/llms.txt-ready-111111)](./llms.txt)
-[![GitHub Pages](https://img.shields.io/badge/site-GitHub%20Pages-222222?logo=github)](https://6kmfi6hp.github.io/docs-ai-reverse/)
+[![Site EN](https://img.shields.io/badge/site-English-222222?logo=github)](https://6kmfi6hp.github.io/docs-ai-reverse/)
+[![Site ZH](https://img.shields.io/badge/site-中文-222222?logo=github)](https://6kmfi6hp.github.io/docs-ai-reverse/zh.html)
 
 **OpenAI-compatible Docs AI gateway** — adapt Mintlify, Inkeep, Stripe, and ReadMe documentation assistants into local Chat Completions / Responses APIs.
+
+> English entry: [README.en.md](./README.en.md) · Site: [EN](https://6kmfi6hp.github.io/docs-ai-reverse/) / [中文](https://6kmfi6hp.github.io/docs-ai-reverse/zh.html)
 
 `docs-ai-reverse` 是一个 OpenAI-compatible gateway，将多个 Docs AI 后端适配为 OpenAI Chat Completions / Responses API 格式。当前内置四个 provider：Mintlify、Inkeep、Stripe 和 ReadMe。
 
 项目（Go 模块名：`claude-code-chat`）使用 `github.com/router-for-me/CLIProxyAPI/v7` 作为核心框架。网关本身负责统一入口、鉴权、请求翻译、流式响应适配、代理和本地 token 估算；各 provider 负责与对应 Docs AI 服务通信。
 
-**关键词 / Keywords:** OpenAI compatible · Docs AI gateway · Mintlify · Inkeep · Stripe docs AI · ReadMe Ask AI · Claude docs · Anthropic docs · Chat Completions · Responses API · Go reverse proxy
+**关键词 / Keywords:** OpenAI compatible · Docs AI gateway · Mintlify · Inkeep · Stripe docs AI · ReadMe Ask AI · Claude docs · Anthropic docs · Chat Completions · Responses API · Go reverse proxy · OpenAI 兼容 · 文档 AI 网关 · 反向代理
 
 ## 目录
 
@@ -457,14 +461,16 @@ MINTLIFY_PROXY=socks5://127.0.0.1:1080 go run ./cmd/probe
 
 | 文档 | 说明 |
 |---|---|
-| [docs/index.md](./docs/index.md) | 文档中心 |
+| [docs/index.md](./docs/index.md) | 文档中心（中英） |
+| [README.en.md](./README.en.md) | English README / SEO entry |
 | [docs/architecture.md](./docs/architecture.md) | 架构与请求链路 |
 | [docs/api.md](./docs/api.md) | OpenAI-compatible API |
 | [docs/configuration.md](./docs/configuration.md) | 配置项与安全注意 |
 | [docs/development.md](./docs/development.md) | 开发与扩展 provider |
-| [llms.txt](./llms.txt) | AI / LLM 爬虫入口 |
+| [llms.txt](./llms.txt) | AI / LLM 爬虫入口（中英） |
 | [llms-full.txt](./llms-full.txt) | 更完整的机器可读摘要 |
-| [Project site](https://6kmfi6hp.github.io/docs-ai-reverse/) | GitHub Pages 落地页 |
+| [Site EN](https://6kmfi6hp.github.io/docs-ai-reverse/) | GitHub Pages English |
+| [Site ZH](https://6kmfi6hp.github.io/docs-ai-reverse/zh.html) | GitHub Pages 中文 |
 
 ## License
 

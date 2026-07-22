@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>docs-ai-reverse — OpenAI 兼容的文档 AI 网关</title>
+  <meta name="description" content="docs-ai-reverse：将 Mintlify、Inkeep、Stripe、ReadMe 文档 AI 适配为 OpenAI Chat Completions / Responses 的本地 Go 网关。支持 Claude 文档、Anthropic 文档、Stripe 文档与 ReadMe Ask AI。" />
+  <meta name="keywords" content="OpenAI 兼容, 文档 AI, Docs AI 网关, Mintlify, Inkeep, Stripe 文档, ReadMe Ask AI, Claude 文档, Anthropic 文档, Chat Completions, Responses API, LLM 网关, Go 反向代理" />
+  <meta name="author" content="6Kmfi6HP" />
+  <meta name="robots" content="index,follow,max-image-preview:large" />
+  <link rel="canonical" href="https://6kmfi6hp.github.io/docs-ai-reverse/zh.html" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="docs-ai-reverse" />
+  <meta property="og:title" content="docs-ai-reverse — OpenAI 兼容的文档 AI 网关" />
+  <meta property="og:description" content="将 Mintlify、Inkeep、Stripe、ReadMe 文档 AI 适配为 OpenAI Chat Completions / Responses API 的本地网关。" />
+  <meta property="og:url" content="https://6kmfi6hp.github.io/docs-ai-reverse/zh.html" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta property="og:image" content="https://opengraph.githubassets.com/1/6Kmfi6HP/docs-ai-reverse" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="docs-ai-reverse — OpenAI 兼容的文档 AI 网关" />
+  <meta name="twitter:description" content="本地 Go 网关：Mintlify / Inkeep / Stripe / ReadMe 文档 AI → OpenAI 兼容 API。" />
+  <meta name="twitter:image" content="https://opengraph.githubassets.com/1/6Kmfi6HP/docs-ai-reverse" />
+
+  <link rel="alternate" hreflang="zh-CN" href="https://6kmfi6hp.github.io/docs-ai-reverse/zh.html" />
+  <link rel="alternate" hreflang="en" href="https://6kmfi6hp.github.io/docs-ai-reverse/" />
+  <link rel="alternate" hreflang="x-default" href="https://6kmfi6hp.github.io/docs-ai-reverse/" />
+  <link rel="alternate" type="text/plain" title="llms.txt" href="./llms.txt" />
+  <link rel="sitemap" type="application/xml" href="./sitemap.xml" />
+  <link rel="stylesheet" href="./styles.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "docs-ai-reverse",
+    "inLanguage": "zh-CN",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "跨平台",
+    "description": "将 Mintlify、Inkeep、Stripe、ReadMe 文档 AI 适配为 OpenAI Chat Completions / Responses 的本地网关。",
+    "url": "https://6kmfi6hp.github.io/docs-ai-reverse/zh.html",
+    "codeRepository": "https://github.com/6Kmfi6HP/docs-ai-reverse",
+    "programmingLanguage": "Go",
+    "author": {"@type": "Person", "name": "6Kmfi6HP", "url": "https://github.com/6Kmfi6HP"},
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+    "keywords": ["OpenAI 兼容", "文档 AI", "Docs AI 网关", "Mintlify", "Inkeep", "Stripe", "ReadMe", "Claude 文档", "LLM 网关"]
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="wrap">
+    <nav class="lang" aria-label="语言">
+      <a href="./" lang="en">English</a>
+      <a href="./zh.html" aria-current="page">中文</a>
+    </nav>
+  </div>
+
+  <header class="hero">
+    <div class="wrap">
+      <h1 class="brand">docs-ai-reverse</h1>
+      <p class="lede">
+        OpenAI 兼容的文档 AI 网关：把 Mintlify、Inkeep、Stripe、ReadMe
+        的文档助手，统一暴露为 Chat Completions / Responses API。
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/6Kmfi6HP/docs-ai-reverse">查看 GitHub</a>
+        <a class="btn btn-ghost" href="https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md">中文 README</a>
+        <a class="btn btn-ghost" href="https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.en.md">English README</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <h2>内置模型</h2>
+      <p class="section-copy">
+        将任意 OpenAI 兼容客户端指向本地网关，然后选择对应文档模型即可。
+      </p>
+      <ul class="models">
+        <li><code>claude-docs</code><span>Mintlify · Claude Code 文档助手</span></li>
+        <li><code>anthropic-docs</code><span>Inkeep · Anthropic 平台文档</span></li>
+        <li><code>stripe-docs</code><span>Stripe 文档 AI · ai.stripe.com</span></li>
+        <li><code>readme-docs</code><span>ReadMe Ask AI · docs.readme.com</span></li>
+      </ul>
+
+      <nav class="links" aria-label="文档">
+        <a href="./index.md">文档中心</a>
+        <a href="./api.md">API</a>
+        <a href="./architecture.md">架构</a>
+        <a href="./configuration.md">配置</a>
+        <a href="./development.md">开发</a>
+        <a href="./llms.txt">llms.txt</a>
+        <a href="./sitemap.xml">Sitemap</a>
+        <a href="./" lang="en">English site</a>
+      </nav>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      本地 Go 网关 · 与 Anthropic、Stripe、Mintlify、ReadMe 无官方关联。
+    </div>
+  </footer>
+</body>
+</html>

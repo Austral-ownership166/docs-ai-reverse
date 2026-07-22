@@ -1,41 +1,49 @@
 # docs-ai-reverse
 
-> OpenAI-compatible gateway that adapts Docs AI backends (Mintlify, Inkeep, Stripe, ReadMe) into Chat Completions and Responses APIs.
+> EN: OpenAI-compatible gateway that adapts Docs AI backends (Mintlify, Inkeep, Stripe, ReadMe) into Chat Completions and Responses APIs.
+>
+> 中文：OpenAI 兼容网关，将 Mintlify、Inkeep、Stripe、ReadMe 文档 AI 适配为 Chat Completions / Responses API。
 
-This file helps LLMs and AI crawlers discover the project. Prefer the linked docs over guessing behavior from file names alone.
+This file helps LLMs and AI crawlers discover the project in both English and Chinese. Prefer linked docs over guessing from file names.
 
-## Project
+## Project / 项目
 
-- Name: docs-ai-reverse
-- Go module: claude-code-chat
-- Repository: https://github.com/6Kmfi6HP/docs-ai-reverse
-- Site: https://6kmfi6hp.github.io/docs-ai-reverse/
-- Language: Go 1.26+
-- License: not declared (no LICENSE file yet)
+- Name / 名称: docs-ai-reverse
+- Go module / 模块: claude-code-chat
+- Repository / 仓库: https://github.com/6Kmfi6HP/docs-ai-reverse
+- Site EN: https://6kmfi6hp.github.io/docs-ai-reverse/
+- Site ZH / 中文站: https://6kmfi6hp.github.io/docs-ai-reverse/zh.html
+- Language / 语言: Go 1.26+
+- License / 许可: not declared（暂无 LICENSE）
 
-## Core docs
+## Human docs / 人工文档
 
-- [README](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md): overview, quick start, models, limits
-- [Architecture](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/architecture.md): request lifecycle and provider adapters
-- [API](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/api.md): OpenAI-compatible endpoints and examples
-- [Configuration](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/configuration.md): config.yaml fields and security notes
-- [Development](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/development.md): local workflow and adding providers
-- [Docs index](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/index.md): documentation hub
+- [README 中文](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md)
+- [README English](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.en.md)
+- [Architecture / 架构](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/architecture.md)
+- [API](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/api.md)
+- [Configuration / 配置](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/configuration.md)
+- [Development / 开发](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/development.md)
+- [Docs hub / 文档中心](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/index.md)
 
-## Models
+## Models / 模型
 
-- `claude-docs` → Mintlify (code.claude.com / leaves.mintlify.com)
-- `anthropic-docs` → Inkeep (Anthropic docs / api.inkeep.com)
-- `stripe-docs` → Stripe docs AI (ai.stripe.com)
-- `readme-docs` → ReadMe Ask AI (docs.readme.com)
+- `claude-docs` → Mintlify（Claude 文档助手）
+- `anthropic-docs` → Inkeep（Anthropic 文档）
+- `stripe-docs` → Stripe docs AI
+- `readme-docs` → ReadMe Ask AI
 
-## API surface
+## API surface / 接口
 
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
-- Auth: Bearer token from `config.yaml` → `api-keys`
+- Auth / 鉴权: Bearer token from `config.yaml` → `api-keys`
 
-## Optional deeper context
+## Keywords / 关键词
 
-- [llms-full.txt](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/llms-full.txt): longer machine-oriented summary
+OpenAI compatible, Docs AI gateway, Mintlify, Inkeep, Stripe, ReadMe, Claude docs, Anthropic docs, Chat Completions, Responses API, Go reverse proxy, OpenAI 兼容, 文档 AI 网关, 反向代理
+
+## Deeper context / 更完整摘要
+
+- [llms-full.txt](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/llms-full.txt)

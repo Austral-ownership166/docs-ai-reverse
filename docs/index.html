@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>docs-ai-reverse — OpenAI-Compatible Docs AI Gateway</title>
-  <meta name="description" content="OpenAI-compatible gateway that adapts Mintlify, Inkeep, Stripe, and ReadMe Docs AI into Chat Completions and Responses APIs. Go-based local reverse proxy for Claude, Anthropic, Stripe, and ReadMe documentation assistants." />
-  <meta name="keywords" content="OpenAI compatible, Docs AI, Mintlify, Inkeep, Stripe docs, ReadMe Ask AI, Claude docs, Anthropic docs, Chat Completions, Responses API, LLM gateway, Go reverse proxy" />
+  <meta name="description" content="OpenAI-compatible Docs AI gateway: adapt Mintlify, Inkeep, Stripe, and ReadMe into Chat Completions / Responses APIs. Local Go reverse proxy for Claude, Anthropic, Stripe, and ReadMe docs assistants." />
+  <meta name="keywords" content="OpenAI compatible, Docs AI gateway, Mintlify, Inkeep, Stripe docs AI, ReadMe Ask AI, Claude docs, Anthropic docs, Chat Completions, Responses API, LLM gateway, Go" />
   <meta name="author" content="6Kmfi6HP" />
   <meta name="robots" content="index,follow,max-image-preview:large" />
   <link rel="canonical" href="https://6kmfi6hp.github.io/docs-ai-reverse/" />
@@ -25,209 +25,53 @@
   <meta name="twitter:image" content="https://opengraph.githubassets.com/1/6Kmfi6HP/docs-ai-reverse" />
 
   <link rel="alternate" hreflang="en" href="https://6kmfi6hp.github.io/docs-ai-reverse/" />
-  <link rel="alternate" hreflang="zh" href="https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md" />
-  <link rel="alternate" type="text/plain" title="llms.txt" href="https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/llms.txt" />
+  <link rel="alternate" hreflang="zh-CN" href="https://6kmfi6hp.github.io/docs-ai-reverse/zh.html" />
+  <link rel="alternate" hreflang="x-default" href="https://6kmfi6hp.github.io/docs-ai-reverse/" />
+  <link rel="alternate" type="text/plain" title="llms.txt" href="./llms.txt" />
   <link rel="sitemap" type="application/xml" href="./sitemap.xml" />
+  <link rel="stylesheet" href="./styles.css" />
 
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "docs-ai-reverse",
-    "applicationCategory": "DeveloperApplication",
-    "operatingSystem": "Cross-platform",
-    "description": "OpenAI-compatible gateway that adapts Mintlify, Inkeep, Stripe, and ReadMe Docs AI into Chat Completions and Responses APIs.",
-    "url": "https://6kmfi6hp.github.io/docs-ai-reverse/",
-    "codeRepository": "https://github.com/6Kmfi6HP/docs-ai-reverse",
-    "programmingLanguage": "Go",
-    "author": {
-      "@type": "Person",
-      "name": "6Kmfi6HP",
-      "url": "https://github.com/6Kmfi6HP"
-    },
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    },
-    "keywords": [
-      "OpenAI compatible",
-      "Docs AI",
-      "Mintlify",
-      "Inkeep",
-      "Stripe",
-      "ReadMe",
-      "gateway",
-      "LLM"
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "docs-ai-reverse",
+        "inLanguage": ["en", "zh-CN"],
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Cross-platform",
+        "description": "OpenAI-compatible gateway that adapts Mintlify, Inkeep, Stripe, and ReadMe Docs AI into Chat Completions and Responses APIs.",
+        "url": "https://6kmfi6hp.github.io/docs-ai-reverse/",
+        "codeRepository": "https://github.com/6Kmfi6HP/docs-ai-reverse",
+        "programmingLanguage": "Go",
+        "author": {"@type": "Person", "name": "6Kmfi6HP", "url": "https://github.com/6Kmfi6HP"},
+        "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+        "keywords": ["OpenAI compatible", "Docs AI", "Mintlify", "Inkeep", "Stripe", "ReadMe", "gateway", "LLM", "文档 AI", "OpenAI 兼容网关"]
+      },
+      {
+        "@type": "WebSite",
+        "name": "docs-ai-reverse",
+        "url": "https://6kmfi6hp.github.io/docs-ai-reverse/",
+        "inLanguage": ["en", "zh-CN"],
+        "description": "Bilingual project site for the OpenAI-compatible Docs AI gateway."
+      }
     ]
   }
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet" />
-
-  <style>
-    :root {
-      --ink: #14201c;
-      --muted: #4a5c54;
-      --paper: #f3efe6;
-      --leaf: #1f6b4f;
-      --leaf-deep: #0f3d2e;
-      --glow: #c8e6d4;
-      --line: rgba(20, 32, 28, 0.12);
-      --max: 68rem;
-    }
-
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      color: var(--ink);
-      font-family: "IBM Plex Sans", sans-serif;
-      background:
-        radial-gradient(1200px 700px at 12% -10%, var(--glow), transparent 55%),
-        radial-gradient(900px 600px at 100% 0%, #e8dcc4, transparent 50%),
-        linear-gradient(180deg, #f7f3ea 0%, var(--paper) 45%, #e9e2d4 100%);
-      min-height: 100vh;
-    }
-
-    a { color: var(--leaf-deep); text-underline-offset: 0.18em; }
-    a:hover { color: var(--leaf); }
-
-    .wrap {
-      width: min(100% - 2.5rem, var(--max));
-      margin-inline: auto;
-    }
-
-    header.hero {
-      padding: clamp(3.5rem, 10vw, 7rem) 0 clamp(3rem, 7vw, 5rem);
-      border-bottom: 1px solid var(--line);
-      animation: rise 700ms ease-out both;
-    }
-
-    .brand {
-      font-family: "Newsreader", Georgia, serif;
-      font-size: clamp(2.6rem, 7vw, 4.6rem);
-      font-weight: 600;
-      letter-spacing: -0.03em;
-      line-height: 0.95;
-      margin: 0 0 1.1rem;
-    }
-
-    .lede {
-      max-width: 38rem;
-      font-size: clamp(1.05rem, 2.2vw, 1.25rem);
-      line-height: 1.55;
-      color: var(--muted);
-      margin: 0 0 1.75rem;
-    }
-
-    .cta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem 1rem;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0.75rem 1.15rem;
-      border-radius: 0.35rem;
-      text-decoration: none;
-      font-weight: 550;
-      font-size: 0.95rem;
-      border: 1px solid transparent;
-      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
-    }
-    .btn:hover { transform: translateY(-1px); }
-    .btn-primary {
-      background: var(--leaf-deep);
-      color: #f5faf7;
-    }
-    .btn-primary:hover { background: var(--leaf); color: #fff; }
-    .btn-ghost {
-      background: transparent;
-      border-color: var(--line);
-      color: var(--ink);
-    }
-
-    main {
-      padding: clamp(2.5rem, 6vw, 4rem) 0 5rem;
-      animation: rise 900ms ease-out 120ms both;
-    }
-
-    h2 {
-      font-family: "Newsreader", Georgia, serif;
-      font-size: clamp(1.5rem, 3vw, 2rem);
-      font-weight: 550;
-      margin: 0 0 0.75rem;
-      letter-spacing: -0.02em;
-    }
-
-    .section-copy {
-      color: var(--muted);
-      max-width: 40rem;
-      line-height: 1.55;
-      margin: 0 0 1.5rem;
-    }
-
-    .models {
-      display: grid;
-      gap: 0.85rem;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .models li {
-      display: grid;
-      grid-template-columns: minmax(9rem, 12rem) 1fr;
-      gap: 0.75rem 1.25rem;
-      padding: 0.85rem 0;
-      border-top: 1px solid var(--line);
-      font-size: 0.98rem;
-    }
-    .models li:last-child { border-bottom: 1px solid var(--line); }
-    .models code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.9em;
-      color: var(--leaf-deep);
-    }
-    .models span { color: var(--muted); }
-
-    .links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.65rem 1.25rem;
-      margin-top: 2.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--line);
-      font-size: 0.95rem;
-    }
-
-    footer {
-      border-top: 1px solid var(--line);
-      padding: 1.5rem 0 2.5rem;
-      color: var(--muted);
-      font-size: 0.88rem;
-      animation: rise 1000ms ease-out 200ms both;
-    }
-
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @media (max-width: 640px) {
-      .models li {
-        grid-template-columns: 1fr;
-        gap: 0.25rem;
-      }
-    }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <div class="wrap">
+    <nav class="lang" aria-label="Language">
+      <a href="./" aria-current="page">English</a>
+      <a href="./zh.html" lang="zh-CN">中文</a>
+    </nav>
+  </div>
+
   <header class="hero">
     <div class="wrap">
       <h1 class="brand">docs-ai-reverse</h1>
@@ -237,7 +81,8 @@
       </p>
       <div class="cta">
         <a class="btn btn-primary" href="https://github.com/6Kmfi6HP/docs-ai-reverse">View on GitHub</a>
-        <a class="btn btn-ghost" href="https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md">Read the README</a>
+        <a class="btn btn-ghost" href="https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.en.md">English README</a>
+        <a class="btn btn-ghost" href="https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md">中文 README</a>
       </div>
     </div>
   </header>
@@ -263,6 +108,7 @@
         <a href="./development.md">Development</a>
         <a href="./llms.txt">llms.txt</a>
         <a href="./sitemap.xml">Sitemap</a>
+        <a href="./zh.html" lang="zh-CN">中文站</a>
       </nav>
     </div>
   </main>
