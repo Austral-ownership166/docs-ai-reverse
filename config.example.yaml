@@ -1,0 +1,23 @@
+# Mintlify → OpenAI gateway (CLIProxyAPI)
+#
+# Copy to config.yaml and adjust api-keys before running:
+#   cp config.example.yaml config.yaml
+#   go run . config.yaml
+
+host: "127.0.0.1"
+port: 8317
+
+# Project-local auth dir (mintlify auth is runtime_only; keep this empty of other providers)
+auth-dir: "./auths"
+
+# Bearer tokens accepted by /v1/* endpoints
+api-keys:
+  - "sk-mintlify-local"
+
+debug: false
+
+# Optional: disable management UI noise for local use
+remote-management:
+  allow-remote: false
+  secret-key: ""
+  disable-control-panel: true

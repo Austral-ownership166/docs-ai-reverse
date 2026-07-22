@@ -1,5 +1,10 @@
+config.yaml
+auths/
+*.log
+
 # Binaries
 claude-chat
+mintlify-gateway
 *.exe
 *.dll
 *.so
