@@ -25,11 +25,11 @@ const providerKey = "mintlify"
 
 // Executor implements auth.ProviderExecutor for Mintlify docs assistant.
 type Executor struct {
-	mu           sync.Mutex
-	clients      map[string]*mintlify.Client
-	sessions     map[string]*mintlify.Session
-	tokens       map[string]tokenCache
-	defaultProxy string
+	proxyDefaults
+	mu       sync.Mutex
+	clients  map[string]*mintlify.Client
+	sessions map[string]*mintlify.Session
+	tokens   map[string]tokenCache
 }
 
 type tokenCache struct {
@@ -44,16 +44,6 @@ func NewExecutor() *Executor {
 		sessions: make(map[string]*mintlify.Session),
 		tokens:   make(map[string]tokenCache),
 	}
-}
-
-// SetDefaultProxy sets the outbound proxy used when auth has no proxy attribute.
-func (e *Executor) SetDefaultProxy(proxyURL string) {
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	e.defaultProxy = strings.TrimSpace(proxyURL)
-	e.mu.Unlock()
 }
 
 // Identifier returns the provider key.
@@ -95,30 +85,6 @@ func siteFromAuth(a *coreauth.Auth) mintlify.SiteConfig {
 		site.Language = v
 	}
 	return site
-}
-
-func proxyFromAuth(a *coreauth.Auth) string {
-	if a == nil {
-		return ""
-	}
-	if a.Attributes != nil {
-		if v := strings.TrimSpace(a.Attributes["proxy"]); v != "" {
-			return v
-		}
-	}
-	return strings.TrimSpace(a.ProxyURL)
-}
-
-func (e *Executor) resolveProxy(a *coreauth.Auth) string {
-	if p := proxyFromAuth(a); p != "" {
-		return p
-	}
-	if e == nil {
-		return ""
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.defaultProxy
 }
 
 func (e *Executor) clientFor(authID, proxyURL string) (*mintlify.Client, error) {
@@ -380,26 +346,8 @@ func (e *Executor) ExecuteStream(ctx context.Context, a *coreauth.Auth, req clip
 }
 
 // CountTokens estimates prompt tokens locally (Mintlify has no count API).
-// Uses tiktoken o200k_base; advertised model context is maxContextTokens (200k).
 func (e *Executor) CountTokens(ctx context.Context, _ *coreauth.Auth, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
-	from := formatMintlify
-	responseFormat := clipexec.ResponseFormatOrSource(opts)
-
-	payload := opts.OriginalRequest
-	if len(payload) == 0 {
-		payload = req.Payload
-	}
-	count, err := estimatePromptTokens(payload)
-	if err != nil {
-		return clipexec.Response{}, err
-	}
-	if count > maxContextTokens {
-		count = maxContextTokens
-	}
-
-	usageJSON := buildOpenAIUsageJSON(count)
-	out := sdktranslator.TranslateTokenCount(ctx, from, responseFormat, count, usageJSON)
-	return clipexec.Response{Payload: out}, nil
+	return countTokensResponse(ctx, formatMintlify, req, opts)
 }
 
 // HttpRequest is not supported (Mintlify uses tls-client, not net/http).

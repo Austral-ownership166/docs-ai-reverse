@@ -1,15 +1,18 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 
+	clipexec "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	"github.com/tidwall/gjson"
 	"github.com/tiktoken-go/tokenizer"
 )
 
-// Advertised context window for claude-docs (pretend max).
+// Advertised context window for docs models (pretend max).
 const maxContextTokens = 200_000
 
 var (
@@ -30,11 +33,30 @@ func buildOpenAIUsageJSON(count int64) []byte {
 	return []byte(fmt.Sprintf(`{"usage":{"prompt_tokens":%d,"completion_tokens":0,"total_tokens":%d}}`, count, count))
 }
 
+// countTokensResponse estimates prompt tokens and translates to the client response format.
+// Used by all docs providers (none expose a native count API).
+func countTokensResponse(ctx context.Context, from sdktranslator.Format, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
+	payload := opts.OriginalRequest
+	if len(payload) == 0 {
+		payload = req.Payload
+	}
+	count, err := estimatePromptTokens(payload)
+	if err != nil {
+		return clipexec.Response{}, err
+	}
+	if count > maxContextTokens {
+		count = maxContextTokens
+	}
+	responseFormat := clipexec.ResponseFormatOrSource(opts)
+	out := sdktranslator.TranslateTokenCount(ctx, from, responseFormat, count, buildOpenAIUsageJSON(count))
+	return clipexec.Response{Payload: out}, nil
+}
+
 // estimatePromptTokens approximates prompt tokens from an OpenAI / Mintlify JSON body.
 func estimatePromptTokens(payload []byte) (int64, error) {
 	enc, err := tokenizerCodec()
 	if err != nil {
-		return 0, fmt.Errorf("mintlify: tokenizer init: %w", err)
+		return 0, fmt.Errorf("tokenizer init: %w", err)
 	}
 	if len(payload) == 0 {
 		return 0, nil
@@ -121,6 +143,20 @@ func collectTextSegments(root gjson.Result, segments *[]string) {
 	}
 
 	addSeg(segments, root.Get("prompt").String())
+
+	// Gemini countTokens / generateContent shape.
+	if contents := root.Get("contents"); contents.Exists() && contents.IsArray() {
+		contents.ForEach(func(_, item gjson.Result) bool {
+			addSeg(segments, item.Get("role").String())
+			if parts := item.Get("parts"); parts.Exists() && parts.IsArray() {
+				parts.ForEach(func(_, part gjson.Result) bool {
+					addSeg(segments, part.Get("text").String())
+					return true
+				})
+			}
+			return true
+		})
+	}
 }
 
 func collectContent(content gjson.Result, segments *[]string) {

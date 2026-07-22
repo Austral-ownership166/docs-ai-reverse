@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	clipexec "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
@@ -31,15 +32,26 @@ func TestEstimatePromptTokens_MintlifyMessages(t *testing.T) {
 	}
 }
 
-func TestCountTokens_Executor(t *testing.T) {
-	e := NewExecutor()
-	payload := []byte(`{"model":"claude-docs","messages":[{"role":"user","content":"hi"}]}`)
-	resp, err := e.CountTokens(context.Background(), nil, clipexec.Request{
-		Model:   "claude-docs",
+func TestEstimatePromptTokens_GeminiContents(t *testing.T) {
+	payload := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello world token count test"}]}]}`)
+	n, err := estimatePromptTokens(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n <= 0 {
+		t.Fatalf("expected positive token count, got %d", n)
+	}
+}
+
+func assertCountTokens(t *testing.T, countTokens func(context.Context, clipexec.Request, clipexec.Options) (clipexec.Response, error), model string) {
+	t.Helper()
+	payload := []byte(fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}]}`, model))
+	resp, err := countTokens(context.Background(), clipexec.Request{
+		Model:   model,
 		Payload: payload,
 	}, clipexec.Options{
-		SourceFormat:     sdktranslator.FormatOpenAI,
-		OriginalRequest:  payload,
+		SourceFormat:    sdktranslator.FormatOpenAI,
+		OriginalRequest: payload,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +63,33 @@ func TestCountTokens_Executor(t *testing.T) {
 	if n > maxContextTokens {
 		t.Fatalf("count %d exceeds max %d", n, maxContextTokens)
 	}
+}
+
+func TestCountTokens_AllProviders(t *testing.T) {
+	t.Run("mintlify", func(t *testing.T) {
+		e := NewExecutor()
+		assertCountTokens(t, func(ctx context.Context, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
+			return e.CountTokens(ctx, nil, req, opts)
+		}, "claude-docs")
+	})
+	t.Run("inkeep", func(t *testing.T) {
+		e := NewInkeepExecutor()
+		assertCountTokens(t, func(ctx context.Context, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
+			return e.CountTokens(ctx, nil, req, opts)
+		}, "anthropic-docs")
+	})
+	t.Run("stripe", func(t *testing.T) {
+		e := NewStripeExecutor()
+		assertCountTokens(t, func(ctx context.Context, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
+			return e.CountTokens(ctx, nil, req, opts)
+		}, "stripe-docs")
+	})
+	t.Run("readme", func(t *testing.T) {
+		e := NewReadmeExecutor()
+		assertCountTokens(t, func(ctx context.Context, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
+			return e.CountTokens(ctx, nil, req, opts)
+		}, "readme-docs")
+	})
 }
 
 func TestMaxContextTokensConstant(t *testing.T) {
