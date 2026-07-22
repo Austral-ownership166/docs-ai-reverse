@@ -79,7 +79,7 @@ func formatToolCallsText(toolCalls gjson.Result) string {
 		if b.Len() > 0 {
 			b.WriteByte('\n')
 		}
-		fmt.Fprintf(&b, "[tool_call id=%s name=%s]\n%s", id, name, args)
+		b.WriteString(formatPromptToolCall(id, name, args))
 		return true
 	})
 	return b.String()
@@ -160,7 +160,7 @@ func messagesFromOpenAIResponses(raw []byte) []mintlify.Message {
 			if args == "" {
 				args = "{}"
 			}
-			out = append(out, mintlify.NewAssistantMessage(fmt.Sprintf("[tool_call id=%s name=%s]\n%s", id, name, args)))
+			out = append(out, mintlify.NewAssistantMessage(formatPromptToolCall(id, name, args)))
 			return true
 		case "function_call_output":
 			id := item.Get("call_id").String()
@@ -213,11 +213,15 @@ func buildMintlifyRequestJSON(messages []mintlify.Message) []byte {
 }
 
 func convertOpenAIRequestToMintlify(_ string, raw []byte, _ bool) []byte {
-	return buildMintlifyRequestJSON(messagesFromOpenAIChat(raw))
+	msgs := messagesFromOpenAIChat(raw)
+	msgs = mergeToolsPrompt(msgs, buildToolsPromptFromRequest(raw))
+	return buildMintlifyRequestJSON(msgs)
 }
 
 func convertOpenAIResponseRequestToMintlify(_ string, raw []byte, _ bool) []byte {
-	return buildMintlifyRequestJSON(messagesFromOpenAIResponses(raw))
+	msgs := messagesFromOpenAIResponses(raw)
+	msgs = mergeToolsPrompt(msgs, buildToolsPromptFromRequest(raw))
+	return buildMintlifyRequestJSON(msgs)
 }
 
 // streamDoneSentinel is emitted by the executor after upstream EOF so translators
@@ -253,12 +257,17 @@ type openAIStreamState struct {
 	NextOutIndex    int
 	MsgOutIndex     int
 
-	Tools        []recordedTool
-	ToolIndex    map[string]int
-	HasText      bool
-	FinishReason string
-	PromptTokens int64
+	Tools            []recordedTool
+	ToolIndex        map[string]int
+	HasText          bool
+	FinishReason     string
+	PromptTokens     int64
 	CompletionTokens int64
+
+	// Prompt-tool mode: buffer type-0 text until EOF, then parse <tool_call>.
+	BufferTools   bool
+	ToolsKnown    bool
+	ContentEmitted bool
 }
 
 func ensureOpenAIStreamState(param *any) *openAIStreamState {
@@ -288,15 +297,20 @@ func (st *openAIStreamState) pendingToolCount() int {
 	return n
 }
 
+func (st *openAIStreamState) noteOriginalRequest(original []byte) {
+	if st.ToolsKnown {
+		return
+	}
+	st.ToolsKnown = true
+	st.BufferTools = requestHasTools(original)
+}
+
 func (st *openAIStreamState) chatFinishReason() string {
-	if st.pendingToolCount() > 0 && !st.HasText {
+	if st.pendingToolCount() > 0 {
 		return "tool_calls"
 	}
 	switch st.FinishReason {
 	case "tool-calls", "tool_calls":
-		if st.pendingToolCount() > 0 && !st.HasText {
-			return "tool_calls"
-		}
 		return "stop"
 	case "length", "max_tokens":
 		return "length"
@@ -308,10 +322,32 @@ func (st *openAIStreamState) chatFinishReason() string {
 }
 
 func mapMintlifyFinishToResponsesStatus(st *openAIStreamState) string {
-	if st.pendingToolCount() > 0 && !st.HasText {
+	if st.pendingToolCount() > 0 {
 		return "requires_action"
 	}
 	return "completed"
+}
+
+func (st *openAIStreamState) emitChatToolCalls(model string, tools []promptToolCall) [][]byte {
+	var out [][]byte
+	ensureChatRole(st, model, &out)
+	for _, tc := range tools {
+		idx := len(st.Tools)
+		st.Tools = append(st.Tools, recordedTool{
+			ID:   tc.ID,
+			Name: tc.Name,
+			Args: tc.Args,
+		})
+		st.ToolIndex[tc.ID] = idx
+		chunk := openAIChatChunk(st, model)
+		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.index", idx)
+		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.id", tc.ID)
+		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.type", "function")
+		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.function.name", tc.Name)
+		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.function.arguments", tc.Args)
+		out = append(out, chunk)
+	}
+	return out
 }
 
 func openAIChatChunk(st *openAIStreamState, model string) []byte {
@@ -333,8 +369,9 @@ func ensureChatRole(st *openAIStreamState, model string, out *[][]byte) {
 	*out = append(*out, chunk)
 }
 
-func convertMintlifyStreamToOpenAI(_ context.Context, model string, _, _, raw []byte, param *any) [][]byte {
+func convertMintlifyStreamToOpenAI(_ context.Context, model string, originalReq, _, raw []byte, param *any) [][]byte {
 	st := ensureOpenAIStreamState(param)
+	st.noteOriginalRequest(originalReq)
 	if st.ID == "" {
 		st.ID = "chatcmpl-" + mintlify.GenerateID()[:24]
 	}
@@ -351,6 +388,24 @@ func convertMintlifyStreamToOpenAI(_ context.Context, model string, _, _, raw []
 		}
 		st.Finished = true
 		var out [][]byte
+		if st.BufferTools {
+			clean, tools := parsePromptToolCalls(st.FullText.String())
+			st.FullText.Reset()
+			st.FullText.WriteString(clean)
+			if len(tools) > 0 {
+				out = append(out, st.emitChatToolCalls(model, tools)...)
+				st.HasText = strings.TrimSpace(clean) != ""
+			} else if clean != "" {
+				ensureChatRole(st, model, &out)
+				delta := openAIChatChunk(st, model)
+				delta, _ = sjson.SetBytes(delta, "choices.0.delta.content", clean)
+				out = append(out, delta)
+				st.ContentEmitted = true
+				st.HasText = true
+			}
+		} else if !st.ContentEmitted && st.FullText.Len() > 0 {
+			// Non-buffer path already streamed; nothing to flush for content.
+		}
 		ensureChatRole(st, model, &out)
 		chunk := openAIChatChunk(st, model)
 		chunk, _ = sjson.SetBytes(chunk, "choices.0.finish_reason", st.chatFinishReason())
@@ -376,7 +431,11 @@ func convertMintlifyStreamToOpenAI(_ context.Context, model string, _, _, raw []
 			return nil
 		}
 		st.FullText.WriteString(text)
+		if st.BufferTools {
+			return nil
+		}
 		st.HasText = true
+		st.ContentEmitted = true
 		var out [][]byte
 		ensureChatRole(st, model, &out)
 		delta := openAIChatChunk(st, model)
@@ -384,39 +443,8 @@ func convertMintlifyStreamToOpenAI(_ context.Context, model string, _, _, raw []
 		out = append(out, delta)
 		return out
 
-	case "9":
-		tc, ok := mintlify.ParseToolCall(val)
-		if !ok {
-			return nil
-		}
-		idx := len(st.Tools)
-		st.Tools = append(st.Tools, recordedTool{
-			ID:   tc.ID,
-			Name: tc.Name,
-			Args: tc.ArgsJSONString(),
-		})
-		st.ToolIndex[tc.ID] = idx
-		var out [][]byte
-		ensureChatRole(st, model, &out)
-		chunk := openAIChatChunk(st, model)
-		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.index", idx)
-		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.id", tc.ID)
-		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.type", "function")
-		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.function.name", tc.Name)
-		chunk, _ = sjson.SetBytes(chunk, "choices.0.delta.tool_calls.0.function.arguments", tc.ArgsJSONString())
-		out = append(out, chunk)
-		return out
-
-	case "a":
-		tr, ok := mintlify.ParseToolResult(val)
-		if !ok {
-			return nil
-		}
-		if i, exists := st.ToolIndex[tr.ID]; exists {
-			st.Tools[i].Result = tr.ResultJSONString()
-			st.Tools[i].Resolved = true
-		}
-		// Server already executed the tool; Chat Completions has no result delta.
+	case "9", "a":
+		// Mintlify server-side RAG tools are not client-executable; swallow them.
 		return nil
 
 	case "e", "d":
@@ -438,27 +466,15 @@ func convertMintlifyStreamToOpenAI(_ context.Context, model string, _, _, raw []
 	}
 }
 
-func convertMintlifyNonStreamToOpenAI(_ context.Context, model string, _, _, raw []byte, _ *any) []byte {
+func convertMintlifyNonStreamToOpenAI(_ context.Context, model string, originalReq, _, raw []byte, _ *any) []byte {
 	var st openAIStreamState
 	st.ToolIndex = make(map[string]int)
+	st.noteOriginalRequest(originalReq)
 	_ = mintlify.ReadLines(strings.NewReader(string(raw)), func(chunk mintlify.Chunk) error {
 		switch chunk.Type {
 		case "0":
 			if text, ok := mintlify.ParseTextDelta(chunk.Value); ok {
 				st.FullText.WriteString(text)
-				st.HasText = true
-			}
-		case "9":
-			if tc, ok := mintlify.ParseToolCall(chunk.Value); ok {
-				st.ToolIndex[tc.ID] = len(st.Tools)
-				st.Tools = append(st.Tools, recordedTool{ID: tc.ID, Name: tc.Name, Args: tc.ArgsJSONString()})
-			}
-		case "a":
-			if tr, ok := mintlify.ParseToolResult(chunk.Value); ok {
-				if i, exists := st.ToolIndex[tr.ID]; exists {
-					st.Tools[i].Result = tr.ResultJSONString()
-					st.Tools[i].Resolved = true
-				}
 			}
 		case "e", "d":
 			if fi, ok := mintlify.ParseFinish(chunk.Value); ok {
@@ -476,12 +492,23 @@ func convertMintlifyNonStreamToOpenAI(_ context.Context, model string, _, _, raw
 		return nil
 	})
 
+	clean, tools := parsePromptToolCalls(st.FullText.String())
+	if len(tools) > 0 {
+		for _, tc := range tools {
+			st.Tools = append(st.Tools, recordedTool{ID: tc.ID, Name: tc.Name, Args: tc.Args})
+			st.ToolIndex[tc.ID] = len(st.Tools) - 1
+		}
+		st.HasText = strings.TrimSpace(clean) != ""
+	} else if strings.TrimSpace(clean) != "" {
+		st.HasText = true
+	}
+
 	out := []byte(`{"id":"","object":"chat.completion","created":0,"model":"","choices":[{"index":0,"message":{"role":"assistant","content":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}`)
 	out, _ = sjson.SetBytes(out, "id", "chatcmpl-"+mintlify.GenerateID()[:24])
 	out, _ = sjson.SetBytes(out, "created", time.Now().Unix())
 	out, _ = sjson.SetBytes(out, "model", model)
-	if st.HasText {
-		out, _ = sjson.SetBytes(out, "choices.0.message.content", st.FullText.String())
+	if st.HasText && strings.TrimSpace(clean) != "" {
+		out, _ = sjson.SetBytes(out, "choices.0.message.content", clean)
 	} else {
 		out, _ = sjson.SetBytes(out, "choices.0.message.content", nil)
 	}
@@ -534,26 +561,29 @@ func (st *openAIStreamState) emitResponseCreated(model string) [][]byte {
 }
 
 func (st *openAIStreamState) emitFunctionCall(tc mintlify.ToolCall) [][]byte {
+	return st.emitFunctionCallParts(tc.ID, tc.Name, tc.ArgsJSONString())
+}
+
+func (st *openAIStreamState) emitFunctionCallParts(id, name, args string) [][]byte {
 	idx := len(st.Tools)
 	outIndex := st.NextOutIndex
 	st.NextOutIndex++
-	itemID := "fc_" + tc.ID
-	args := tc.ArgsJSONString()
+	itemID := "fc_" + id
 	st.Tools = append(st.Tools, recordedTool{
-		ID:       tc.ID,
-		Name:     tc.Name,
+		ID:       id,
+		Name:     name,
 		Args:     args,
 		ItemID:   itemID,
 		OutIndex: outIndex,
 	})
-	st.ToolIndex[tc.ID] = idx
+	st.ToolIndex[id] = idx
 
 	var out [][]byte
 	added := []byte(`{"type":"response.output_item.added","output_index":0,"item":{"id":"","type":"function_call","status":"in_progress","arguments":"","call_id":"","name":""}}`)
 	added, _ = sjson.SetBytes(added, "output_index", outIndex)
 	added, _ = sjson.SetBytes(added, "item.id", itemID)
-	added, _ = sjson.SetBytes(added, "item.call_id", tc.ID)
-	added, _ = sjson.SetBytes(added, "item.name", tc.Name)
+	added, _ = sjson.SetBytes(added, "item.call_id", id)
+	added, _ = sjson.SetBytes(added, "item.name", name)
 	_ = st.nextSeq()
 	out = append(out, sseEvent("response.output_item.added", added))
 
@@ -574,8 +604,8 @@ func (st *openAIStreamState) emitFunctionCall(tc mintlify.ToolCall) [][]byte {
 	itemDone := []byte(`{"type":"response.output_item.done","output_index":0,"item":{"id":"","type":"function_call","status":"completed","arguments":"","call_id":"","name":""}}`)
 	itemDone, _ = sjson.SetBytes(itemDone, "output_index", outIndex)
 	itemDone, _ = sjson.SetBytes(itemDone, "item.id", itemID)
-	itemDone, _ = sjson.SetBytes(itemDone, "item.call_id", tc.ID)
-	itemDone, _ = sjson.SetBytes(itemDone, "item.name", tc.Name)
+	itemDone, _ = sjson.SetBytes(itemDone, "item.call_id", id)
+	itemDone, _ = sjson.SetBytes(itemDone, "item.name", name)
 	itemDone, _ = sjson.SetBytes(itemDone, "item.arguments", args)
 	_ = st.nextSeq()
 	out = append(out, sseEvent("response.output_item.done", itemDone))
@@ -609,8 +639,9 @@ func (st *openAIStreamState) ensureMessageOpened() [][]byte {
 	return out
 }
 
-func convertMintlifyStreamToOpenAIResponse(_ context.Context, model string, _, _, raw []byte, param *any) [][]byte {
+func convertMintlifyStreamToOpenAIResponse(_ context.Context, model string, originalReq, _, raw []byte, param *any) [][]byte {
 	st := ensureOpenAIStreamState(param)
+	st.noteOriginalRequest(originalReq)
 	line := strings.TrimSpace(string(raw))
 	if line == "" {
 		return nil
@@ -624,8 +655,27 @@ func convertMintlifyStreamToOpenAIResponse(_ context.Context, model string, _, _
 		var out [][]byte
 		out = append(out, st.emitResponseCreated(model)...)
 
+		if st.BufferTools {
+			clean, tools := parsePromptToolCalls(st.FullText.String())
+			st.FullText.Reset()
+			st.FullText.WriteString(clean)
+			for _, tc := range tools {
+				out = append(out, st.emitFunctionCallParts(tc.ID, tc.Name, tc.Args)...)
+			}
+			st.HasText = strings.TrimSpace(clean) != ""
+		}
+
 		if st.MessageOpen || st.HasText {
 			out = append(out, st.ensureMessageOpened()...)
+			if st.BufferTools && !st.ContentEmitted && st.FullText.Len() > 0 {
+				delta := []byte(`{"type":"response.output_text.delta","item_id":"","output_index":0,"content_index":0,"delta":""}`)
+				delta, _ = sjson.SetBytes(delta, "item_id", st.ItemID)
+				delta, _ = sjson.SetBytes(delta, "output_index", st.MsgOutIndex)
+				delta, _ = sjson.SetBytes(delta, "delta", st.FullText.String())
+				_ = st.nextSeq()
+				out = append(out, sseEvent("response.output_text.delta", delta))
+				st.ContentEmitted = true
+			}
 			partDone := []byte(`{"type":"response.content_part.done","item_id":"","output_index":0,"content_index":0,"part":{"type":"output_text","text":""}}`)
 			partDone, _ = sjson.SetBytes(partDone, "item_id", st.ItemID)
 			partDone, _ = sjson.SetBytes(partDone, "output_index", st.MsgOutIndex)
@@ -690,7 +740,11 @@ func convertMintlifyStreamToOpenAIResponse(_ context.Context, model string, _, _
 			return nil
 		}
 		st.FullText.WriteString(text)
+		if st.BufferTools {
+			return nil
+		}
 		st.HasText = true
+		st.ContentEmitted = true
 		var out [][]byte
 		out = append(out, st.emitResponseCreated(model)...)
 		out = append(out, st.ensureMessageOpened()...)
@@ -702,25 +756,7 @@ func convertMintlifyStreamToOpenAIResponse(_ context.Context, model string, _, _
 		out = append(out, sseEvent("response.output_text.delta", delta))
 		return out
 
-	case "9":
-		tc, ok := mintlify.ParseToolCall(val)
-		if !ok {
-			return nil
-		}
-		var out [][]byte
-		out = append(out, st.emitResponseCreated(model)...)
-		out = append(out, st.emitFunctionCall(tc)...)
-		return out
-
-	case "a":
-		tr, ok := mintlify.ParseToolResult(val)
-		if !ok {
-			return nil
-		}
-		if i, exists := st.ToolIndex[tr.ID]; exists {
-			st.Tools[i].Result = tr.ResultJSONString()
-			st.Tools[i].Resolved = true
-		}
+	case "9", "a":
 		return nil
 
 	case "e", "d":
@@ -742,32 +778,15 @@ func convertMintlifyStreamToOpenAIResponse(_ context.Context, model string, _, _
 	}
 }
 
-func convertMintlifyNonStreamToOpenAIResponse(_ context.Context, model string, _, _, raw []byte, _ *any) []byte {
+func convertMintlifyNonStreamToOpenAIResponse(_ context.Context, model string, originalReq, _, raw []byte, _ *any) []byte {
 	var st openAIStreamState
 	st.ToolIndex = make(map[string]int)
+	st.noteOriginalRequest(originalReq)
 	_ = mintlify.ReadLines(strings.NewReader(string(raw)), func(chunk mintlify.Chunk) error {
 		switch chunk.Type {
 		case "0":
 			if text, ok := mintlify.ParseTextDelta(chunk.Value); ok {
 				st.FullText.WriteString(text)
-				st.HasText = true
-			}
-		case "9":
-			if tc, ok := mintlify.ParseToolCall(chunk.Value); ok {
-				outIndex := st.NextOutIndex
-				st.NextOutIndex++
-				st.ToolIndex[tc.ID] = len(st.Tools)
-				st.Tools = append(st.Tools, recordedTool{
-					ID: tc.ID, Name: tc.Name, Args: tc.ArgsJSONString(),
-					ItemID: "fc_" + tc.ID, OutIndex: outIndex,
-				})
-			}
-		case "a":
-			if tr, ok := mintlify.ParseToolResult(chunk.Value); ok {
-				if i, exists := st.ToolIndex[tr.ID]; exists {
-					st.Tools[i].Result = tr.ResultJSONString()
-					st.Tools[i].Resolved = true
-				}
 			}
 		case "e", "d":
 			if fi, ok := mintlify.ParseFinish(chunk.Value); ok {
@@ -784,6 +803,18 @@ func convertMintlifyNonStreamToOpenAIResponse(_ context.Context, model string, _
 		}
 		return nil
 	})
+
+	clean, tools := parsePromptToolCalls(st.FullText.String())
+	for _, tc := range tools {
+		outIndex := st.NextOutIndex
+		st.NextOutIndex++
+		st.ToolIndex[tc.ID] = len(st.Tools)
+		st.Tools = append(st.Tools, recordedTool{
+			ID: tc.ID, Name: tc.Name, Args: tc.Args,
+			ItemID: "fc_" + tc.ID, OutIndex: outIndex,
+		})
+	}
+	st.HasText = strings.TrimSpace(clean) != ""
 
 	id := "resp_" + mintlify.GenerateID()[:24]
 	msgID := "msg_" + mintlify.GenerateID()[:20]
@@ -804,10 +835,10 @@ func convertMintlifyNonStreamToOpenAIResponse(_ context.Context, model string, _
 		outputs, _ = sjson.SetRawBytes(outputs, fmt.Sprintf("%d", t.OutIndex), item)
 	}
 	if st.HasText || len(st.Tools) == 0 {
-		msgIndex := len(st.Tools)
+		msgIndex := st.NextOutIndex
 		msg := []byte(`{"id":"","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":""}]}`)
 		msg, _ = sjson.SetBytes(msg, "id", msgID)
-		msg, _ = sjson.SetBytes(msg, "content.0.text", st.FullText.String())
+		msg, _ = sjson.SetBytes(msg, "content.0.text", clean)
 		outputs, _ = sjson.SetRawBytes(outputs, fmt.Sprintf("%d", msgIndex), msg)
 	}
 	out, _ = sjson.SetRawBytes(out, "output", outputs)
