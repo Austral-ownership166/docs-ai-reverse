@@ -19,25 +19,39 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
 
-func registerMintlify(core *coreauth.Manager, exec *provider.Executor, proxyURL string) (string, error) {
-	// Re-bind executor after Service.Load / ensureExecutorsForAuth may have run.
-	core.RegisterExecutor(exec)
+type modelDef struct {
+	ID          string
+	DisplayName string
+	Description string
+	Type        string
+}
 
-	authID := "mintlify-default"
-	attrs := map[string]string{
-		"runtime_only": "true",
-		"subdomain":    "claude-code",
-		"site_origin":  "https://code.claude.com",
-		"docs_path":    "/en/quickstart",
-		"language":     "en",
+type providers struct {
+	mintlify *provider.Executor
+	inkeep   *provider.InkeepExecutor
+	stripe   *provider.StripeExecutor
+	readme   *provider.ReadmeExecutor
+}
+
+func (p *providers) setDefaultProxy(proxyURL string) {
+	p.mintlify.SetDefaultProxy(proxyURL)
+	p.inkeep.SetDefaultProxy(proxyURL)
+	p.stripe.SetDefaultProxy(proxyURL)
+	p.readme.SetDefaultProxy(proxyURL)
+}
+
+func registerAuth(core *coreauth.Manager, id, providerName, label string, attrs map[string]string, proxyURL string, models []modelDef) (string, error) {
+	if attrs == nil {
+		attrs = map[string]string{}
 	}
+	attrs["runtime_only"] = "true"
 	if proxyURL = strings.TrimSpace(proxyURL); proxyURL != "" {
 		attrs["proxy"] = proxyURL
 	}
 	registered, err := core.Register(context.Background(), &coreauth.Auth{
-		ID:         authID,
-		Provider:   "mintlify",
-		Label:      "Mintlify Docs Assistant",
+		ID:         id,
+		Provider:   providerName,
+		Label:      label,
 		Status:     coreauth.StatusActive,
 		Attributes: attrs,
 		ProxyURL:   proxyURL,
@@ -45,29 +59,80 @@ func registerMintlify(core *coreauth.Manager, exec *provider.Executor, proxyURL 
 	if err != nil {
 		return "", err
 	}
+	authID := id
 	if registered != nil && registered.ID != "" {
 		authID = registered.ID
 	}
 
-	models := []*cliproxy.ModelInfo{{
-		ID:                         "claude-docs",
-		Object:                     "model",
-		Type:                       "mintlify",
-		DisplayName:                "Claude Code Docs",
-		Description:                "Mintlify docs assistant (local token estimate, 200k context)",
-		ContextLength:              200000,
-		InputTokenLimit:            200000,
-		OutputTokenLimit:           8192,
-		MaxCompletionTokens:        8192,
-		SupportedGenerationMethods: []string{"generateContent", "countTokens"},
-	}}
+	infos := make([]*cliproxy.ModelInfo, 0, len(models))
+	for _, m := range models {
+		infos = append(infos, &cliproxy.ModelInfo{
+			ID:                         m.ID,
+			Object:                     "model",
+			Type:                       m.Type,
+			DisplayName:                m.DisplayName,
+			Description:                m.Description,
+			ContextLength:              200000,
+			InputTokenLimit:            200000,
+			OutputTokenLimit:           8192,
+			MaxCompletionTokens:        8192,
+			SupportedGenerationMethods: []string{"generateContent", "countTokens"},
+		})
+	}
 	for _, a := range core.List() {
-		if strings.EqualFold(a.Provider, "mintlify") {
-			cliproxy.GlobalModelRegistry().RegisterClient(a.ID, "mintlify", models)
+		if strings.EqualFold(a.Provider, providerName) && a.ID == authID {
+			cliproxy.GlobalModelRegistry().RegisterClient(a.ID, providerName, infos)
 			core.RefreshSchedulerEntry(a.ID)
 		}
 	}
 	return authID, nil
+}
+
+func registerAllProviders(core *coreauth.Manager, p *providers, proxyURL string) error {
+	core.RegisterExecutor(p.mintlify)
+	core.RegisterExecutor(p.inkeep)
+	core.RegisterExecutor(p.stripe)
+	core.RegisterExecutor(p.readme)
+
+	if _, err := registerAuth(core, "mintlify-default", "mintlify", "Mintlify Docs Assistant", map[string]string{
+		"subdomain":   "claude-code",
+		"site_origin": "https://code.claude.com",
+		"docs_path":   "/en/quickstart",
+		"language":    "en",
+	}, proxyURL, []modelDef{{
+		ID: "claude-docs", DisplayName: "Claude Code Docs", Type: "mintlify",
+		Description: "Mintlify docs assistant (code.claude.com)",
+	}}); err != nil {
+		return fmt.Errorf("mintlify: %w", err)
+	}
+
+	if _, err := registerAuth(core, "inkeep-claude", "inkeep", "Anthropic Docs (Inkeep)", map[string]string{
+		"origin":  "https://platform.claude.com",
+		"referer": "https://platform.claude.com/",
+	}, proxyURL, []modelDef{{
+		ID: "anthropic-docs", DisplayName: "Anthropic Docs", Type: "inkeep",
+		Description: "Inkeep docs AI for Anthropic/Claude platform docs",
+	}}); err != nil {
+		return fmt.Errorf("inkeep: %w", err)
+	}
+
+	if _, err := registerAuth(core, "stripe-default", "stripe", "Stripe Docs AI", nil, proxyURL, []modelDef{{
+		ID: "stripe-docs", DisplayName: "Stripe Docs", Type: "stripe",
+		Description: "Stripe docs AI (ai.stripe.com)",
+	}}); err != nil {
+		return fmt.Errorf("stripe: %w", err)
+	}
+
+	if _, err := registerAuth(core, "readme-default", "readme", "ReadMe Docs AI", map[string]string{
+		"docs_url": "https://docs.readme.com",
+	}, proxyURL, []modelDef{{
+		ID: "readme-docs", DisplayName: "ReadMe Docs", Type: "readme",
+		Description: "ReadMe Ask AI (docs.readme.com)",
+	}}); err != nil {
+		return fmt.Errorf("readme: %w", err)
+	}
+
+	return nil
 }
 
 func main() {
@@ -97,33 +162,29 @@ func main() {
 	}
 
 	core := coreauth.NewManager(tokenStore, nil, nil)
-	exec := provider.NewExecutor()
+	p := &providers{
+		mintlify: provider.NewExecutor(),
+		inkeep:   provider.NewInkeepExecutor(),
+		stripe:   provider.NewStripeExecutor(),
+		readme:   provider.NewReadmeExecutor(),
+	}
 	proxyURL := strings.TrimSpace(cfg.ProxyURL)
 	if proxyURL == "" {
 		proxyURL = strings.TrimSpace(os.Getenv("MINTLIFY_PROXY"))
 	}
-	exec.SetDefaultProxy(proxyURL)
-	core.RegisterExecutor(exec)
+	p.setDefaultProxy(proxyURL)
 
 	hooks := cliproxy.Hooks{
 		OnAfterStart: func(_ *cliproxy.Service) {
-			// Register AFTER Service.Run → Manager.Load(), which replaces the auth map.
-			authID, errReg := registerMintlify(core, exec, proxyURL)
-			if errReg != nil {
-				fmt.Fprintf(os.Stderr, "register mintlify auth: %v\n", errReg)
+			if errReg := registerAllProviders(core, p, proxyURL); errReg != nil {
+				fmt.Fprintf(os.Stderr, "register providers: %v\n", errReg)
 				return
 			}
-			if proxyURL != "" {
-				fmt.Printf("mintlify gateway ready; model=claude-docs auth=%s proxy=%s\n", authID, proxyURL)
-			} else {
-				fmt.Printf("mintlify gateway ready; model=claude-docs auth=%s\n", authID)
-			}
-
-			// Watcher may settle shortly after start; re-bind models once more.
+			fmt.Println("docs gateway ready; models=claude-docs,anthropic-docs,stripe-docs,readme-docs")
 			go func() {
 				time.Sleep(750 * time.Millisecond)
-				if _, errRetry := registerMintlify(core, exec, proxyURL); errRetry != nil {
-					fmt.Fprintf(os.Stderr, "re-register mintlify auth: %v\n", errRetry)
+				if errRetry := registerAllProviders(core, p, proxyURL); errRetry != nil {
+					fmt.Fprintf(os.Stderr, "re-register providers: %v\n", errRetry)
 				}
 			}()
 		},

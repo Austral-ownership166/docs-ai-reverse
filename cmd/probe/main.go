@@ -14,9 +14,6 @@ import (
 
 func main() {
 	proxyURL := strings.TrimSpace(os.Getenv("MINTLIFY_PROXY"))
-	if proxyURL == "" {
-		proxyURL = "socks5://100.74.21.88:7890"
-	}
 	fmt.Println("proxy=", proxyURL)
 
 	c, err := mintlify.NewClient(proxyURL)

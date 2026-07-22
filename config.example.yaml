@@ -1,12 +1,18 @@
-# Mintlify → OpenAI gateway (CLIProxyAPI SDK)
+# Docs AI → OpenAI gateway (CLIProxyAPI SDK)
 #
-# Exposes OpenAI-compatible endpoints with Mintlify prompt-tool translation:
-#   POST /v1/chat/completions   (stream tool_calls + content)
-#   POST /v1/responses          (function_call output items + message)
-# Model: claude-docs
+# Exposes OpenAI-compatible endpoints:
+#   POST /v1/chat/completions
+#   POST /v1/responses
+#   GET  /v1/models
 #
-# Client tools are injected as text protocol (Mintlify has no native tools API).
-# Mintlify server-side search is swallowed; only client <tool_call> markers surface.
+# Models (from docs-expert providers verified working):
+#   claude-docs      Mintlify (code.claude.com)
+#   anthropic-docs   Inkeep (platform.claude.com / Anthropic docs)
+#   stripe-docs      Stripe docs AI (ai.stripe.com)
+#   readme-docs      ReadMe Ask AI (docs.readme.com)
+#
+# Skipped (docs-expert CLI failed locally): vercel, fern, gitbook,
+# better-auth, generic mintlify/inkeep auto-detect sites.
 #
 # Copy to config.yaml and adjust api-keys before running:
 #   cp config.example.yaml config.yaml
@@ -15,14 +21,12 @@
 host: "127.0.0.1"
 port: 8317
 
-# Outbound proxy for Mintlify TLS client (socks5:// / http://)
-# IMPORTANT: Mintlify returns 418 for many VPN/datacenter exits
-# ("unavailable from your network"). Prefer empty (direct) or a clean
-# residential egress. Do NOT use known-blocked exits such as
-# socks5://100.74.21.88:7890 (verified 418 on leaves.mintlify.com).
+# Outbound proxy for all docs providers (socks5:// / http:// / https://)
+# Also supports "direct"/"none" to bypass env proxies.
+# Mintlify returns 418 for many VPN/datacenter exits — leave empty or use a clean exit.
 proxy-url: ""
 
-# Project-local auth dir (mintlify auth is runtime_only; keep this empty of other providers)
+# Project-local auth dir (runtime_only auths; keep empty of other providers)
 auth-dir: "./auths"
 
 # Bearer tokens accepted by /v1/* endpoints
@@ -31,7 +35,6 @@ api-keys:
 
 debug: false
 
-# Optional: disable management UI noise for local use
 remote-management:
   allow-remote: false
   secret-key: ""
