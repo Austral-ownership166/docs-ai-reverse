@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -81,21 +80,6 @@ type filter struct {
 	Language string `json:"language"`
 }
 
-type browserState struct {
-	Cookies []stateCookie `json:"cookies"`
-}
-
-type stateCookie struct {
-	Name     string  `json:"name"`
-	Value    string  `json:"value"`
-	Domain   string  `json:"domain"`
-	Path     string  `json:"path"`
-	Secure   bool    `json:"secure"`
-	HTTPOnly bool    `json:"httpOnly"`
-	Expires  float64 `json:"expires"`
-	SameSite string  `json:"sameSite"`
-}
-
 type cookieFile struct {
 	CookieString string `json:"cookie_string"`
 	Expires      int64  `json:"expires"`
@@ -122,39 +106,6 @@ func newTLSClient() (tls_client.HttpClient, error) {
 		tls_client.WithClientProfile(profiles.Chrome_146),
 		tls_client.WithNotFollowRedirects(),
 	)
-}
-
-func parseBrowserState(data []byte) (string, error) {
-	var state browserState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return "", err
-	}
-
-	var cfBm, awsalb, awsalbCors string
-	for _, c := range state.Cookies {
-		switch {
-		case strings.Contains(c.Domain, "mintlify") && c.Name == "__cf_bm":
-			cfBm = c.Value
-		case c.Domain == "leaves.mintlify.com" && c.Name == "AWSALB":
-			awsalb = c.Value
-		case c.Domain == "leaves.mintlify.com" && c.Name == "AWSALBCORS":
-			awsalbCors = c.Value
-		}
-	}
-
-	if cfBm == "" {
-		return "", fmt.Errorf("未找到 mintlify.com __cf_bm cookie")
-	}
-
-	var cookies []string
-	cookies = append(cookies, "__cf_bm="+cfBm)
-	if awsalb != "" {
-		cookies = append(cookies, "AWSALB="+awsalb)
-	}
-	if awsalbCors != "" {
-		cookies = append(cookies, "AWSALBCORS="+awsalbCors)
-	}
-	return strings.Join(cookies, "; "), nil
 }
 
 func buildCookieString(cfBm, awsalb, awsalbCors string) (string, error) {
@@ -191,7 +142,6 @@ func pickChromeCookies(cookies []sweetcookie.Cookie, grace time.Duration) (cfBm,
 }
 
 // extractCookiesFromChrome 用 sweetcookie 直接读取本机 Chrome cookie 库并解密。
-// 比 agent-browser/CDP 更可靠：不依赖远程调试端口，Chrome 无需特殊启动参数。
 func extractCookiesFromChrome() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
@@ -240,21 +190,6 @@ func extractCookiesFromChrome() (string, error) {
 	return cookieStr, nil
 }
 
-func extractCookiesFromAgentBrowser() (string, error) {
-	stateFile := cookieFilePath + ".tmp"
-	cmd := exec.Command("agent-browser", "--auto-connect", "state", "save", stateFile)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("agent-browser 执行失败 (%v): %s", err, strings.TrimSpace(string(out)))
-	}
-
-	data, err := os.ReadFile(stateFile)
-	os.Remove(stateFile)
-	if err != nil {
-		return "", fmt.Errorf("读取状态文件失败: %w", err)
-	}
-	return parseBrowserState(data)
-}
-
 func persistCookies(cookieStr string) {
 	persist := cookieFile{CookieString: cookieStr, Expires: time.Now().Unix() + 1800, Domain: "mintlify.com"}
 	saveData, _ := json.Marshal(persist)
@@ -271,24 +206,9 @@ func loadCookies() (string, error) {
 			}
 			fmt.Println("cookie 已过期，重新获取...")
 		}
-
-		cookieStr, err := parseBrowserState(data)
-		if err == nil {
-			persistCookies(cookieStr)
-			return cookieStr, nil
-		}
 	}
 
-	// 优先：直接从本机浏览器 cookie 库提取（sweetcookie）
-	if cookieStr, err := extractCookiesFromChrome(); err == nil {
-		persistCookies(cookieStr)
-		return cookieStr, nil
-	} else {
-		fmt.Printf("Chrome cookie 库提取失败，回退 agent-browser: %v\n", err)
-	}
-
-	// 回退：CDP 导出（浏览器需已打开目标页）
-	cookieStr, err := extractCookiesFromAgentBrowser()
+	cookieStr, err := extractCookiesFromChrome()
 	if err != nil {
 		return "", err
 	}
