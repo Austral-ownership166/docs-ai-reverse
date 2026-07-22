@@ -1,0 +1,41 @@
+# docs-ai-reverse
+
+> OpenAI-compatible gateway that adapts Docs AI backends (Mintlify, Inkeep, Stripe, ReadMe) into Chat Completions and Responses APIs.
+
+This file helps LLMs and AI crawlers discover the project. Prefer the linked docs over guessing behavior from file names alone.
+
+## Project
+
+- Name: docs-ai-reverse
+- Go module: claude-code-chat
+- Repository: https://github.com/6Kmfi6HP/docs-ai-reverse
+- Site: https://6kmfi6hp.github.io/docs-ai-reverse/
+- Language: Go 1.26+
+- License: not declared (no LICENSE file yet)
+
+## Core docs
+
+- [README](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md): overview, quick start, models, limits
+- [Architecture](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/architecture.md): request lifecycle and provider adapters
+- [API](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/api.md): OpenAI-compatible endpoints and examples
+- [Configuration](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/configuration.md): config.yaml fields and security notes
+- [Development](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/development.md): local workflow and adding providers
+- [Docs index](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/index.md): documentation hub
+
+## Models
+
+- `claude-docs` → Mintlify (code.claude.com / leaves.mintlify.com)
+- `anthropic-docs` → Inkeep (Anthropic docs / api.inkeep.com)
+- `stripe-docs` → Stripe docs AI (ai.stripe.com)
+- `readme-docs` → ReadMe Ask AI (docs.readme.com)
+
+## API surface
+
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- Auth: Bearer token from `config.yaml` → `api-keys`
+
+## Optional deeper context
+
+- [llms-full.txt](https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/llms-full.txt): longer machine-oriented summary

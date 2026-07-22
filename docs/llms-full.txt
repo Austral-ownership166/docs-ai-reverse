@@ -1,0 +1,53 @@
+# docs-ai-reverse — full LLM context
+
+## One-line summary
+
+docs-ai-reverse is a local OpenAI-compatible HTTP gateway built on CLIProxyAPI/v7. It registers four Docs AI providers and translates OpenAI client traffic into each upstream protocol.
+
+## What it is / is not
+
+- Is: a reverse adapter / gateway for Docs AI chat assistants.
+- Is not: an official Anthropic/Stripe/ReadMe/Mintlify product, a hosted SaaS, or a general LLM proxy for arbitrary OpenAI models.
+
+## Runtime
+
+- Entry: `main.go` (`go run . config.yaml`)
+- Default listen: `127.0.0.1:8317`
+- Config example: `config.example.yaml` (copy to `config.yaml`; real keys must stay local)
+- Auth dir: `./auths` (runtime_only)
+- Global outbound proxy: `proxy-url` (`socks5://`, `http://`, `https://`, or `direct`/`none`)
+- Probe tool: `cmd/probe` for Mintlify connectivity diagnostics
+
+## Provider matrix
+
+| Model ID        | Provider type | Upstream                         | Streaming notes                                      |
+|-----------------|---------------|----------------------------------|------------------------------------------------------|
+| claude-docs     | mintlify      | leaves.mintlify.com              | Custom `type:value` line protocol → gateway SSE      |
+| anthropic-docs  | inkeep        | api.inkeep.com                   | Native OpenAI-like SSE                               |
+| stripe-docs     | stripe        | ai.stripe.com                    | Create thread + poll (~500ms, up to ~60s)            |
+| readme-docs     | readme        | docs.readme.com/chatgpt/ask      | Non-stream Markdown wrapped as 3 chunks              |
+
+## Important constraints
+
+- Mintlify may return 418 (VPN/datacenter), 419 (token expiry), 420 (Cloudflare bot), 402 (quota/payment).
+- Mintlify tools use prompt-tool XML (`<available_tools>` / `<tool_call>`), parsed at end of response.
+- Token counts are local `tiktoken-go` / `o200k_base` estimates; claimed context length is 200k.
+- `api-keys` only guard the gateway; they do not select/enable individual providers.
+- Skipped / not wired: vercel, fern, gitbook, better-auth, generic mintlify/inkeep auto-detect.
+
+## Key source paths
+
+- `main.go` — startup, auth registration, model catalog
+- `internal/provider/` — executors, translator, tokens, proxy
+- `internal/mintlify/` — TLS fingerprint client + stream parser
+- `internal/inkeep/` — Inkeep HTTP client
+- `internal/stripeai/` — Stripe AI client
+- `internal/readme/` — ReadMe Ask AI client
+
+## Canonical human docs
+
+https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/README.md
+https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/architecture.md
+https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/api.md
+https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/configuration.md
+https://github.com/6Kmfi6HP/docs-ai-reverse/blob/main/docs/development.md

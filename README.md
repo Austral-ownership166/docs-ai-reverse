@@ -1,8 +1,32 @@
 # docs-ai-reverse
 
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20compatible-412991)](./docs/api.md)
+[![Docs](https://img.shields.io/badge/docs-hub-1f6b4f)](./docs/index.md)
+[![llms.txt](https://img.shields.io/badge/llms.txt-ready-111111)](./llms.txt)
+[![GitHub Pages](https://img.shields.io/badge/site-GitHub%20Pages-222222?logo=github)](https://6kmfi6hp.github.io/docs-ai-reverse/)
+
+**OpenAI-compatible Docs AI gateway** — adapt Mintlify, Inkeep, Stripe, and ReadMe documentation assistants into local Chat Completions / Responses APIs.
+
 `docs-ai-reverse` 是一个 OpenAI-compatible gateway，将多个 Docs AI 后端适配为 OpenAI Chat Completions / Responses API 格式。当前内置四个 provider：Mintlify、Inkeep、Stripe 和 ReadMe。
 
 项目（Go 模块名：`claude-code-chat`）使用 `github.com/router-for-me/CLIProxyAPI/v7` 作为核心框架。网关本身负责统一入口、鉴权、请求翻译、流式响应适配、代理和本地 token 估算；各 provider 负责与对应 Docs AI 服务通信。
+
+**关键词 / Keywords:** OpenAI compatible · Docs AI gateway · Mintlify · Inkeep · Stripe docs AI · ReadMe Ask AI · Claude docs · Anthropic docs · Chat Completions · Responses API · Go reverse proxy
+
+## 目录
+
+- [功能特性](#功能特性)
+- [架构](#架构)
+- [Provider 对比](#provider-对比)
+- [快速开始](#快速开始)
+- [API 使用](#api-使用)
+- [配置参考](#配置参考)
+- [项目结构](#项目结构)
+- [开发说明](#开发说明)
+- [已知限制](#已知限制)
+- [文档索引](#文档索引)
+- [License](#license)
 
 ## 功能特性
 
@@ -428,6 +452,19 @@ MINTLIFY_PROXY=socks5://127.0.0.1:1080 go run ./cmd/probe
 - `config.example.yaml` 的注释列出了当前跳过的 provider：`vercel`、`fern`、`gitbook`、`better-auth`，以及 generic Mintlify / Inkeep auto-detect。
 - Responses API 的 Mintlify 翻译在代码中有明确注册；使用 Responses API 访问其他 provider 时，应以实际 provider 注册和测试结果为准。
 - 项目没有提供 `LICENSE` 文件。仓库没有声明可直接套用的开源许可证；在再分发或商用前，请先确认项目维护者的授权条款。
+
+## 文档索引
+
+| 文档 | 说明 |
+|---|---|
+| [docs/index.md](./docs/index.md) | 文档中心 |
+| [docs/architecture.md](./docs/architecture.md) | 架构与请求链路 |
+| [docs/api.md](./docs/api.md) | OpenAI-compatible API |
+| [docs/configuration.md](./docs/configuration.md) | 配置项与安全注意 |
+| [docs/development.md](./docs/development.md) | 开发与扩展 provider |
+| [llms.txt](./llms.txt) | AI / LLM 爬虫入口 |
+| [llms-full.txt](./llms-full.txt) | 更完整的机器可读摘要 |
+| [Project site](https://6kmfi6hp.github.io/docs-ai-reverse/) | GitHub Pages 落地页 |
 
 ## License
 
