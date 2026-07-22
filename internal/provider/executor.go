@@ -25,10 +25,11 @@ const providerKey = "mintlify"
 
 // Executor implements auth.ProviderExecutor for Mintlify docs assistant.
 type Executor struct {
-	mu       sync.Mutex
-	clients  map[string]*mintlify.Client
-	sessions map[string]*mintlify.Session
-	tokens   map[string]tokenCache
+	mu           sync.Mutex
+	clients      map[string]*mintlify.Client
+	sessions     map[string]*mintlify.Session
+	tokens       map[string]tokenCache
+	defaultProxy string
 }
 
 type tokenCache struct {
@@ -43,6 +44,16 @@ func NewExecutor() *Executor {
 		sessions: make(map[string]*mintlify.Session),
 		tokens:   make(map[string]tokenCache),
 	}
+}
+
+// SetDefaultProxy sets the outbound proxy used when auth has no proxy attribute.
+func (e *Executor) SetDefaultProxy(proxyURL string) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	e.defaultProxy = strings.TrimSpace(proxyURL)
+	e.mu.Unlock()
 }
 
 // Identifier returns the provider key.
@@ -86,13 +97,38 @@ func siteFromAuth(a *coreauth.Auth) mintlify.SiteConfig {
 	return site
 }
 
-func (e *Executor) clientFor(authID string) (*mintlify.Client, error) {
+func proxyFromAuth(a *coreauth.Auth) string {
+	if a == nil {
+		return ""
+	}
+	if a.Attributes != nil {
+		if v := strings.TrimSpace(a.Attributes["proxy"]); v != "" {
+			return v
+		}
+	}
+	return strings.TrimSpace(a.ProxyURL)
+}
+
+func (e *Executor) resolveProxy(a *coreauth.Auth) string {
+	if p := proxyFromAuth(a); p != "" {
+		return p
+	}
+	if e == nil {
+		return ""
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if c := e.clients[authID]; c != nil {
+	return e.defaultProxy
+}
+
+func (e *Executor) clientFor(authID, proxyURL string) (*mintlify.Client, error) {
+	proxyURL = strings.TrimSpace(proxyURL)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if c := e.clients[authID]; c != nil && c.ProxyURL() == proxyURL {
 		return c, nil
 	}
-	c, err := mintlify.NewClient()
+	c, err := mintlify.NewClient(proxyURL)
 	if err != nil {
 		return nil, err
 	}
@@ -130,14 +166,14 @@ func (e *Executor) updateSession(authID string, s mintlify.Session) {
 	}
 }
 
-func (e *Executor) getToken(site mintlify.SiteConfig, authID string) (string, error) {
+func (e *Executor) getToken(site mintlify.SiteConfig, authID, proxyURL string) (string, error) {
 	e.mu.Lock()
 	cached, ok := e.tokens[authID]
 	e.mu.Unlock()
 	if ok && cached.token != "" && time.Now().Before(cached.expiresAt.Add(-60*time.Second)) {
 		return cached.token, nil
 	}
-	tok, err := mintlify.FetchToken(site.SiteOrigin)
+	tok, err := mintlify.FetchToken(site.SiteOrigin, proxyURL)
 	if err != nil {
 		return "", err
 	}
@@ -166,9 +202,19 @@ func prepareUpstreamBody(translated []byte, site mintlify.SiteConfig, token stri
 	}
 	body, _ = sjson.SetBytes(body, "id", site.Subdomain)
 	body, _ = sjson.SetBytes(body, "fp", site.Subdomain)
-	body, _ = sjson.SetBytes(body, "filter.language", site.Language)
-	body, _ = sjson.SetBytes(body, "currentPath", site.DocsPath)
-	body, _ = sjson.SetBytes(body, "_", token)
+	// docs-expert sends filter.groups=["*"]; Claude Code docs also send language.
+	body, _ = sjson.SetBytes(body, "filter.groups", []string{"*"})
+	if site.Language != "" {
+		body, _ = sjson.SetBytes(body, "filter.language", site.Language)
+	}
+	path := site.DocsPath
+	if path == "" {
+		path = "/"
+	}
+	body, _ = sjson.SetBytes(body, "currentPath", path)
+	if token != "" {
+		body, _ = sjson.SetBytes(body, "_", token)
+	}
 	if session != nil {
 		if session.ThreadID != "" {
 			body, _ = sjson.SetBytes(body, "threadId", session.ThreadID)
@@ -184,17 +230,47 @@ func prepareUpstreamBody(translated []byte, site mintlify.SiteConfig, token stri
 	return body, nil
 }
 
+// sendWithCookieFallback posts once; on 418 with a proxy, retries once without proxy
+// (Mintlify explicitly blocks many VPN egress IPs — see frontend status 418 copy).
+func (e *Executor) sendWithCookieFallback(ctx context.Context, authID string, site mintlify.SiteConfig, proxyURL string, body []byte) (*mintlify.StreamResponse, string, error) {
+	client, err := e.clientFor(authID, proxyURL)
+	if err != nil {
+		return nil, proxyURL, err
+	}
+	cookie, _ := mintlify.LoadCookiesForClient(client, site)
+	// docs-expert works without cookies; cookie is best-effort.
+	stream, err := client.SendStream(ctx, site, cookie, body)
+	if err != nil && proxyURL != "" && strings.Contains(err.Error(), "(418)") {
+		// Drop blocked VPN egress and retry direct.
+		e.mu.Lock()
+		delete(e.clients, authID)
+		e.mu.Unlock()
+		direct, errDirect := e.clientFor(authID, "")
+		if errDirect != nil {
+			return nil, proxyURL, err
+		}
+		cookie2, _ := mintlify.LoadCookies()
+		stream2, err2 := direct.SendStream(ctx, site, cookie2, body)
+		if err2 != nil {
+			return nil, "", fmt.Errorf("proxy 418 then direct failed: proxy=%v; direct=%w", err, err2)
+		}
+		return stream2, "", nil
+	}
+	return stream, proxyURL, err
+}
+
 // Execute handles non-streaming OpenAI-compatible requests.
 func (e *Executor) Execute(ctx context.Context, a *coreauth.Auth, req clipexec.Request, opts clipexec.Options) (clipexec.Response, error) {
 	authID := e.authID(a)
 	site := siteFromAuth(a)
+	proxyURL := e.resolveProxy(a)
 	from := opts.SourceFormat
 	to := formatMintlify
 	responseFormat := clipexec.ResponseFormatOrSource(opts)
 
 	translated := sdktranslator.TranslateRequest(from, to, req.Model, req.Payload, opts.Stream)
 
-	token, err := e.getToken(site, authID)
+	token, err := e.getToken(site, authID, proxyURL)
 	if err != nil {
 		return clipexec.Response{}, err
 	}
@@ -204,16 +280,7 @@ func (e *Executor) Execute(ctx context.Context, a *coreauth.Auth, req clipexec.R
 		return clipexec.Response{}, err
 	}
 
-	client, err := e.clientFor(authID)
-	if err != nil {
-		return clipexec.Response{}, err
-	}
-	cookie, err := mintlify.LoadCookies()
-	if err != nil {
-		return clipexec.Response{}, err
-	}
-
-	stream, err := client.SendStream(ctx, site, cookie, body)
+	stream, _, err := e.sendWithCookieFallback(ctx, authID, site, proxyURL, body)
 	if err != nil {
 		if strings.Contains(err.Error(), "419") {
 			e.invalidateToken(authID)
@@ -237,13 +304,14 @@ func (e *Executor) Execute(ctx context.Context, a *coreauth.Auth, req clipexec.R
 func (e *Executor) ExecuteStream(ctx context.Context, a *coreauth.Auth, req clipexec.Request, opts clipexec.Options) (*clipexec.StreamResult, error) {
 	authID := e.authID(a)
 	site := siteFromAuth(a)
+	proxyURL := e.resolveProxy(a)
 	from := opts.SourceFormat
 	to := formatMintlify
 	responseFormat := clipexec.ResponseFormatOrSource(opts)
 
 	translated := sdktranslator.TranslateRequest(from, to, req.Model, req.Payload, true)
 
-	token, err := e.getToken(site, authID)
+	token, err := e.getToken(site, authID, proxyURL)
 	if err != nil {
 		return nil, err
 	}
@@ -253,16 +321,7 @@ func (e *Executor) ExecuteStream(ctx context.Context, a *coreauth.Auth, req clip
 		return nil, err
 	}
 
-	client, err := e.clientFor(authID)
-	if err != nil {
-		return nil, err
-	}
-	cookie, err := mintlify.LoadCookies()
-	if err != nil {
-		return nil, err
-	}
-
-	stream, err := client.SendStream(ctx, site, cookie, body)
+	stream, _, err := e.sendWithCookieFallback(ctx, authID, site, proxyURL, body)
 	if err != nil {
 		if strings.Contains(err.Error(), "419") {
 			e.invalidateToken(authID)

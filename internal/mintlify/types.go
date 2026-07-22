@@ -31,9 +31,11 @@ type MessageRequest struct {
 	Regenerate   bool      `json:"regenerate,omitempty"`
 }
 
-// Filter selects docs language.
+// Filter selects docs language / groups (docs-expert uses groups:["*"]).
 type Filter struct {
-	Language string `json:"language"`
+	Language string   `json:"language,omitempty"`
+	Groups   []string `json:"groups,omitempty"`
+	Version  string   `json:"version,omitempty"`
 }
 
 // Chunk is one Mintlify stream line (`T:value`).

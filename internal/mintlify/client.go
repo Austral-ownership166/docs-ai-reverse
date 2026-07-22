@@ -23,7 +23,15 @@ import (
 
 const (
 	aiMessageHost = "https://leaves.mintlify.com"
-	chromeUA      = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+	// Match docs-expert + current Chrome docs widget UA range.
+	chromeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+// Upstream status meanings from Mintlify docs frontend (status → type/message).
+const (
+	errMsg402 = "Usage of this feature is temporarily limited (402 payment/quota). Please try again later."
+	errMsg418 = "The assistant is unavailable from your network (418). Mintlify blocks many VPN/datacenter egress IPs — disable proxy-url or use a clean residential exit."
+	errMsg420 = "Your request could not be verified (420 CF bot). Refresh cookies via Chrome or warm cookies on the same egress IP."
 )
 
 var cookieFilePath = filepath.Join(os.Getenv("HOME"), ".claude-code-cookies.json")
@@ -41,13 +49,17 @@ func GenerateID() string {
 	return fmt.Sprintf("%x", b)
 }
 
-func newTLSClient() (tls_client.HttpClient, error) {
+func newTLSClient(proxyURL string) (tls_client.HttpClient, error) {
 	// Chrome_146（HTTP/2）可绕过 CF；ForceHttp1 反而会 420。
-	return tls_client.NewHttpClient(tls_client.NewNoopLogger(),
+	opts := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(60),
 		tls_client.WithClientProfile(profiles.Chrome_146),
 		tls_client.WithNotFollowRedirects(),
-	)
+	}
+	if proxyURL = strings.TrimSpace(proxyURL); proxyURL != "" {
+		opts = append(opts, tls_client.WithProxyUrl(proxyURL))
+	}
+	return tls_client.NewHttpClient(tls_client.NewNoopLogger(), opts...)
 }
 
 func buildCookieString(cfBm, awsalb, awsalbCors string) (string, error) {
@@ -170,13 +182,14 @@ func InvalidateCookies() {
 }
 
 // FetchToken loads the Mintlify siteconfig JWT for the given site origin.
-func FetchToken(siteOrigin string) (string, error) {
+// proxyURL may be empty, or socks5:// / http:// for outbound access.
+func FetchToken(siteOrigin, proxyURL string) (string, error) {
 	siteOrigin = strings.TrimRight(strings.TrimSpace(siteOrigin), "/")
 	if siteOrigin == "" {
 		siteOrigin = DefaultSiteConfig().SiteOrigin
 	}
 	url := siteOrigin + "/docs/_mintlify/assistant/siteconfig"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := fhttp.NewRequest(fhttp.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -184,7 +197,11 @@ func FetchToken(siteOrigin string) (string, error) {
 	req.Header.Set("Referer", siteOrigin+"/docs/en/quickstart")
 	req.Header.Set("Origin", siteOrigin)
 
-	resp, err := http.DefaultClient.Do(req)
+	client, err := newTLSClient(proxyURL)
+	if err != nil {
+		return "", fmt.Errorf("创建 TLS client 失败: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("请求 siteconfig 失败: %w", err)
 	}
@@ -219,16 +236,26 @@ func DecodeTokenPayload(token string) (map[string]any, error) {
 
 // Client talks to the Mintlify assistant API with Chrome TLS fingerprinting.
 type Client struct {
-	http tls_client.HttpClient
+	http     tls_client.HttpClient
+	proxyURL string
 }
 
 // NewClient creates a Mintlify TLS client.
-func NewClient() (*Client, error) {
-	httpClient, err := newTLSClient()
+// proxyURL may be empty, or e.g. socks5://host:port / http://host:port.
+func NewClient(proxyURL string) (*Client, error) {
+	httpClient, err := newTLSClient(proxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("创建 TLS client 失败: %w", err)
 	}
-	return &Client{http: httpClient}, nil
+	return &Client{http: httpClient, proxyURL: strings.TrimSpace(proxyURL)}, nil
+}
+
+// ProxyURL returns the outbound proxy configured for this client.
+func (c *Client) ProxyURL() string {
+	if c == nil {
+		return ""
+	}
+	return c.proxyURL
 }
 
 // StreamResponse is an open upstream stream; caller must Close.
@@ -244,6 +271,97 @@ func (r *StreamResponse) Close() error {
 		return nil
 	}
 	return r.Body.Close()
+}
+
+// WarmCookies fetches Cloudflare / ALB cookies via the client's outbound path
+// (useful when using a proxy whose egress IP differs from the local Chrome jar).
+func (c *Client) WarmCookies(ctx context.Context, site SiteConfig) (string, error) {
+	if c == nil || c.http == nil {
+		return "", fmt.Errorf("mintlify client is nil")
+	}
+	if site.SiteOrigin == "" {
+		site.SiteOrigin = DefaultSiteConfig().SiteOrigin
+	}
+	if site.DocsPath == "" {
+		site.DocsPath = DefaultSiteConfig().DocsPath
+	}
+	referer := strings.TrimRight(site.SiteOrigin, "/") + "/docs" + site.DocsPath
+
+	targets := []string{
+		aiMessageHost + "/",
+		strings.TrimRight(site.SiteOrigin, "/") + "/docs" + site.DocsPath,
+	}
+	var parts []string
+	seen := map[string]string{}
+	for _, u := range targets {
+		req, err := fhttp.NewRequestWithContext(ctx, fhttp.MethodGet, u, nil)
+		if err != nil {
+			return "", err
+		}
+		req.Header = fhttp.Header{
+			"user-agent":         {chromeUA},
+			"accept":             {"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+			"accept-language":    {"en-US,en;q=0.9"},
+			"referer":            {referer},
+			"sec-fetch-dest":     {"document"},
+			"sec-fetch-mode":     {"navigate"},
+			"sec-fetch-site":     {"none"},
+			fhttp.HeaderOrderKey: {"user-agent", "accept", "accept-language", "referer"},
+		}
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("warm cookies failed (%s): %w", u, err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		for _, sc := range resp.Header.Values("Set-Cookie") {
+			name, value := parseSetCookieNV(sc)
+			if name == "" || value == "" {
+				continue
+			}
+			switch name {
+			case "__cf_bm", "AWSALB", "AWSALBCORS", "cf_clearance":
+				seen[name] = value
+			}
+		}
+	}
+	for _, name := range []string{"__cf_bm", "AWSALB", "AWSALBCORS", "cf_clearance"} {
+		if v := seen[name]; v != "" {
+			parts = append(parts, name+"="+v)
+		}
+	}
+	if seen["__cf_bm"] == "" && seen["cf_clearance"] == "" {
+		return "", fmt.Errorf("warm cookies: missing __cf_bm from proxy egress")
+	}
+	cookieStr := strings.Join(parts, "; ")
+	persistCookies(cookieStr)
+	return cookieStr, nil
+}
+
+func parseSetCookieNV(setCookie string) (name, value string) {
+	part := strings.SplitN(setCookie, ";", 2)[0]
+	kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
+	if len(kv) != 2 {
+		return "", ""
+	}
+	return strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
+}
+
+// LoadCookiesForClient prefers proxy-warmed cookies when proxyURL is set,
+// otherwise falls back to Chrome/cache cookies.
+func LoadCookiesForClient(c *Client, site SiteConfig) (string, error) {
+	if c != nil && c.proxyURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		warmed, err := c.WarmCookies(ctx, site)
+		if err != nil {
+			return "", fmt.Errorf("warm cookies via proxy: %w", err)
+		}
+		if warmed != "" {
+			return warmed, nil
+		}
+	}
+	return LoadCookies()
 }
 
 // SendStream posts a message request and returns a streaming body (line-oriented).
@@ -268,23 +386,27 @@ func (c *Client) SendStream(ctx context.Context, site SiteConfig, cookie string,
 	}
 
 	referer := strings.TrimRight(site.SiteOrigin, "/") + "/docs" + site.DocsPath
+	// Header set mirrors docs-expert (Accept: */*, Origin/Referer/UA). Cookie is optional
+	// but helps CF when present; leave empty when using a foreign egress IP.
 	req.Header = fhttp.Header{
+		"accept":          {"*/*"},
 		"content-type":    {"application/json"},
-		"user-agent":      {chromeUA},
-		"accept":          {"text/event-stream"},
-		"accept-language": {"en-US,en;q=0.9"},
-		"referer":         {referer},
 		"origin":          {site.SiteOrigin},
-		"cookie":          {cookie},
+		"referer":         {referer + "/"},
+		"user-agent":      {chromeUA},
+		"accept-language": {"en-US,en;q=0.9"},
 		fhttp.HeaderOrderKey: {
-			"content-type",
-			"user-agent",
 			"accept",
-			"accept-language",
-			"referer",
+			"content-type",
 			"origin",
-			"cookie",
+			"referer",
+			"user-agent",
+			"accept-language",
 		},
+	}
+	if strings.TrimSpace(cookie) != "" {
+		req.Header.Set("cookie", cookie)
+		req.Header[fhttp.HeaderOrderKey] = append(req.Header[fhttp.HeaderOrderKey], "cookie")
 	}
 
 	resp, err := c.http.Do(req)
@@ -301,15 +423,31 @@ func (c *Client) SendStream(ctx context.Context, site SiteConfig, cookie string,
 	switch {
 	case resp.StatusCode == 200:
 		return &StreamResponse{Body: resp.Body, Session: session, Header: resp.Header}, nil
+	case resp.StatusCode == 402:
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		detail := strings.TrimSpace(string(body))
+		if detail == "" {
+			return nil, fmt.Errorf("%s", errMsg402)
+		}
+		return nil, fmt.Errorf("%s 详情: %s", errMsg402, detail)
 	case resp.StatusCode == 420:
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		InvalidateCookies()
-		return nil, fmt.Errorf("CF Bot Management 拦截 (420): 需要更新 cookie。请用 Chrome 访问 %s 后再试: %s", referer, bytes.TrimSpace(body))
+		return nil, fmt.Errorf("%s 请用 Chrome 访问 %s 后再试: %s", errMsg420, referer, bytes.TrimSpace(body))
 	case resp.StatusCode == 419:
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		return nil, fmt.Errorf("token 过期 (419): 需要重新获取 siteconfig: %s", bytes.TrimSpace(body))
+	case resp.StatusCode == 418:
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		detail := strings.TrimSpace(string(body))
+		if detail == "" {
+			return nil, fmt.Errorf("%s", errMsg418)
+		}
+		return nil, fmt.Errorf("%s 详情: %s", errMsg418, detail)
 	case resp.StatusCode == 400 || resp.StatusCode == 450:
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()

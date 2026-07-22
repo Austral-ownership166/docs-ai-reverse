@@ -19,23 +19,28 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
 
-func registerMintlify(core *coreauth.Manager, exec *provider.Executor) (string, error) {
+func registerMintlify(core *coreauth.Manager, exec *provider.Executor, proxyURL string) (string, error) {
 	// Re-bind executor after Service.Load / ensureExecutorsForAuth may have run.
 	core.RegisterExecutor(exec)
 
 	authID := "mintlify-default"
+	attrs := map[string]string{
+		"runtime_only": "true",
+		"subdomain":    "claude-code",
+		"site_origin":  "https://code.claude.com",
+		"docs_path":    "/en/quickstart",
+		"language":     "en",
+	}
+	if proxyURL = strings.TrimSpace(proxyURL); proxyURL != "" {
+		attrs["proxy"] = proxyURL
+	}
 	registered, err := core.Register(context.Background(), &coreauth.Auth{
-		ID:       authID,
-		Provider: "mintlify",
-		Label:    "Mintlify Docs Assistant",
-		Status:   coreauth.StatusActive,
-		Attributes: map[string]string{
-			"runtime_only": "true",
-			"subdomain":    "claude-code",
-			"site_origin":  "https://code.claude.com",
-			"docs_path":    "/en/quickstart",
-			"language":     "en",
-		},
+		ID:         authID,
+		Provider:   "mintlify",
+		Label:      "Mintlify Docs Assistant",
+		Status:     coreauth.StatusActive,
+		Attributes: attrs,
+		ProxyURL:   proxyURL,
 	})
 	if err != nil {
 		return "", err
@@ -45,15 +50,15 @@ func registerMintlify(core *coreauth.Manager, exec *provider.Executor) (string, 
 	}
 
 	models := []*cliproxy.ModelInfo{{
-		ID:                   "claude-docs",
-		Object:               "model",
-		Type:                 "mintlify",
-		DisplayName:          "Claude Code Docs",
-		Description:          "Mintlify docs assistant (local token estimate, 200k context)",
-		ContextLength:        200000,
-		InputTokenLimit:      200000,
-		OutputTokenLimit:     8192,
-		MaxCompletionTokens:  8192,
+		ID:                         "claude-docs",
+		Object:                     "model",
+		Type:                       "mintlify",
+		DisplayName:                "Claude Code Docs",
+		Description:                "Mintlify docs assistant (local token estimate, 200k context)",
+		ContextLength:              200000,
+		InputTokenLimit:            200000,
+		OutputTokenLimit:           8192,
+		MaxCompletionTokens:        8192,
 		SupportedGenerationMethods: []string{"generateContent", "countTokens"},
 	}}
 	for _, a := range core.List() {
@@ -93,22 +98,31 @@ func main() {
 
 	core := coreauth.NewManager(tokenStore, nil, nil)
 	exec := provider.NewExecutor()
+	proxyURL := strings.TrimSpace(cfg.ProxyURL)
+	if proxyURL == "" {
+		proxyURL = strings.TrimSpace(os.Getenv("MINTLIFY_PROXY"))
+	}
+	exec.SetDefaultProxy(proxyURL)
 	core.RegisterExecutor(exec)
 
 	hooks := cliproxy.Hooks{
 		OnAfterStart: func(_ *cliproxy.Service) {
 			// Register AFTER Service.Run → Manager.Load(), which replaces the auth map.
-			authID, errReg := registerMintlify(core, exec)
+			authID, errReg := registerMintlify(core, exec, proxyURL)
 			if errReg != nil {
 				fmt.Fprintf(os.Stderr, "register mintlify auth: %v\n", errReg)
 				return
 			}
-			fmt.Printf("mintlify gateway ready; model=claude-docs auth=%s\n", authID)
+			if proxyURL != "" {
+				fmt.Printf("mintlify gateway ready; model=claude-docs auth=%s proxy=%s\n", authID, proxyURL)
+			} else {
+				fmt.Printf("mintlify gateway ready; model=claude-docs auth=%s\n", authID)
+			}
 
 			// Watcher may settle shortly after start; re-bind models once more.
 			go func() {
 				time.Sleep(750 * time.Millisecond)
-				if _, errRetry := registerMintlify(core, exec); errRetry != nil {
+				if _, errRetry := registerMintlify(core, exec, proxyURL); errRetry != nil {
 					fmt.Fprintf(os.Stderr, "re-register mintlify auth: %v\n", errRetry)
 				}
 			}()
